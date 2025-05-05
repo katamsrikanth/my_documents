@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container search-container">
+    <h2 class="mb-4">Search Documents</h2>
+    
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-info">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-body">
+            <form id="searchForm">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="doc_type" class="form-label">Document Type</label>
+                        <select class="form-select" id="doc_type" name="doc_type" onchange="updateDocuments()">
+                            <option value="">All Types</option>
+                            {% for type in doc_types %}
+                                <option value="{{ type }}">{{ type }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="document" class="form-label">Select Document</label>
+                        <select class="form-select" id="document" name="document" disabled>
+                            <option value="">Select a document type first</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="query" class="form-label">Search Query</label>
+                    <input type="text" class="form-control" id="query" name="query" 
+                           placeholder="Enter your search query" required>
+                    <div class="form-text">Ask any question about the document content</div>
+                </div>
+                <button type="submit" class="btn btn-primary">Search</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="results" class="mt-4"></div>
+</div>
+
+<script>
+    function updateDocuments() {
+        const docType = document.getElementById('doc_type').value;
+        const documentSelect = document.getElementById('document');
+        const resultsDiv = document.getElementById('results');
+        
+        // Show loading state
+        documentSelect.innerHTML = '<option value="">Loading documents...</option>';
+        documentSelect.disabled = true;
+        
+        // Fetch documents for the selected type
+        fetch(`/get_documents?doc_type=${encodeURIComponent(docType)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    documentSelect.innerHTML = `<option value="">Error: ${data.error}</option>`;
+                    return;
+                }
+                
+                documentSelect.innerHTML = '<option value="">All Documents</option>';
+                data.documents.forEach(doc => {
+                    documentSelect.innerHTML += `<option value="${doc.name}">${doc.name}</option>`;
+                });
+                documentSelect.disabled = false;
+            })
+            .catch(error => {
+                documentSelect.innerHTML = `<option value="">Error loading documents</option>`;
+            });
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const query = document.getElementById('query').value;
+        const selectedDoc = document.getElementById('document').value;
+        const selectedType = document.getElementById('doc_type').value;
+        const resultsDiv = document.getElementById('results');
+        
+        // Show loading state
+        resultsDiv.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p>Searching...</p></div>';
+        
+        fetch('/search', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `query=${encodeURIComponent(query)}&document=${encodeURIComponent(selectedDoc)}&doc_type=${encodeURIComponent(selectedType)}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                resultsDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                return;
+            }
+            
+            if (data.results && data.results.length > 0) {
+                let html = '<div class="card"><div class="card-body"><h5 class="card-title">Search Results</h5>';
+                data.results.forEach(result => {
+                    const content = result.summary || result.content;
+                    html += `
+                        <div class="result-card">
+                            <h6 class="text-primary">${result.document_name}</h6>
+                            <div class="content">${content}</div>
+                        </div>
+                        <hr>
+                    `;
+                });
+                html += '</div></div>';
+                resultsDiv.innerHTML = html;
+            } else {
+                resultsDiv.innerHTML = '<div class="alert alert-info">No results found</div>';
+            }
+        })
+        .catch(error => {
+            resultsDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        });
+    });
+</script>
+{% endblock %} 

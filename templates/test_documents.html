@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Test Documents View</h2>
+    <p>Total Documents: {{ total_documents }}</p>
+    
+    {% for doc_type, documents in documents_by_type.items() %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h3>{{ doc_type }} ({{ documents|length }} documents)</h3>
+        </div>
+        <div class="card-body">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Document Name</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in documents %}
+                    <tr>
+                        <td>{{ doc.id }}</td>
+                        <td>{{ doc.name }}</td>
+                        <td>{{ doc.type }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %} 

@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Document Scanner</h2>
+    
+    <div class="card">
+        <div class="card-body">
+            <form id="documentScannerForm" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="documentFile" class="form-label">Upload Document</label>
+                    <input type="file" class="form-control" id="documentFile" name="document" accept=".pdf,.doc,.docx" required>
+                    <div class="form-text">Supported formats: PDF, DOC, DOCX</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="documentType" class="form-label">Document Type</label>
+                    <select class="form-select" id="documentType" name="document_type" required>
+                        <option value="">Select document type</option>
+                        <option value="contract">Contract</option>
+                        <option value="application">Application Form</option>
+                        <option value="agreement">Agreement</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    Scan Document
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="scanResults" class="mt-4" style="display: none;">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Scan Results</h5>
+            </div>
+            <div class="card-body">
+                <div id="scanStatus" class="mb-3"></div>
+                <div id="aiAnalysis" class="mb-3"></div>
+                <div id="missingFields" class="mb-3"></div>
+                <div id="improperFields" class="mb-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('documentScannerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitButton = document.querySelector('button[type="submit"]');
+    const spinner = submitButton.querySelector('.spinner-border');
+    const formData = new FormData();
+    formData.append('document', document.getElementById('documentFile').files[0]);
+    formData.append('document_type', document.getElementById('documentType').value);
+    
+    // Show loading spinner
+    spinner.classList.remove('d-none');
+    submitButton.disabled = true;
+    
+    try {
+        const response = await fetch('/scan_document', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        document.getElementById('scanResults').style.display = 'block';
+        document.getElementById('scanStatus').innerHTML = `
+            <div class="alert ${result.status === 'complete' ? 'alert-success' : 'alert-warning'}">
+                ${result.message}
+            </div>
+        `;
+        
+        // Display AI analysis
+        if (result.analysis) {
+            document.getElementById('aiAnalysis').innerHTML = `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">AI Analysis</h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-0">${result.analysis}</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        if (result.missing_fields && result.missing_fields.length > 0) {
+            document.getElementById('missingFields').innerHTML = `
+                <h6>Missing Mandatory Fields:</h6>
+                <ul class="list-group">
+                    ${result.missing_fields.map(field => `
+                        <li class="list-group-item list-group-item-danger">${field}</li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+        
+        if (result.improper_fields && result.improper_fields.length > 0) {
+            document.getElementById('improperFields').innerHTML = `
+                <h6>Improperly Filled Fields:</h6>
+                <ul class="list-group">
+                    ${result.improper_fields.map(field => `
+                        <li class="list-group-item list-group-item-warning">
+                            <strong>${field.field || field}</strong>
+                            ${field.reason ? `<br><small class="text-muted">${field.reason}</small>` : ''}
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('scanResults').style.display = 'block';
+        document.getElementById('scanStatus').innerHTML = `
+            <div class="alert alert-danger">
+                An error occurred while scanning the document. Please try again.
+            </div>
+        `;
+    } finally {
+        // Hide loading spinner
+        spinner.classList.add('d-none');
+        submitButton.disabled = false;
+    }
+});
+</script>
+{% endblock %} 

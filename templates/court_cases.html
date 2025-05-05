@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Court Cases Search</h1>
+    
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Search Filters</h5>
+            <form id="searchForm" onsubmit="searchCases(event)">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="query" class="form-label">Search Query</label>
+                        <input type="text" class="form-control" id="query" name="query" placeholder="Enter search terms...">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="case_title" class="form-label">Case Title</label>
+                        <input type="text" class="form-control" id="case_title" name="case_title" placeholder="e.g., Matter of Cuppek v. DiNapoli">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="citation" class="form-label">Citation</label>
+                        <input type="text" class="form-control" id="citation" name="citation">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="court" class="form-label">Court</label>
+                        <input type="text" class="form-control" id="court" name="court">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="jurisdiction" class="form-label">Jurisdiction</label>
+                        <input type="text" class="form-control" id="jurisdiction" name="jurisdiction">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="decision_date" class="form-label">Decision Date</label>
+                        <input type="text" class="form-control" id="decision_date" name="decision_date">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="docket_number" class="form-label">Docket Number</label>
+                        <input type="text" class="form-control" id="docket_number" name="docket_number">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="parties" class="form-label">Parties</label>
+                        <input type="text" class="form-control" id="parties" name="parties">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="judges" class="form-label">Judges</label>
+                        <input type="text" class="form-control" id="judges" name="judges">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="authoring_judge" class="form-label">Authoring Judge</label>
+                        <input type="text" class="form-control" id="authoring_judge" name="authoring_judge">
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Search</button>
+                <button type="button" class="btn btn-secondary" onclick="resetForm()">Reset</button>
+            </form>
+        </div>
+    </div>
+    
+    <div id="searchResults" class="mt-4">
+        <!-- Results will be displayed here -->
+    </div>
+</div>
+
+<script>
+function searchCases(event) {
+    event.preventDefault();
+    
+    const formData = {
+        query: document.getElementById('query').value,
+        case_title: document.getElementById('case_title').value,
+        citation: document.getElementById('citation').value,
+        court: document.getElementById('court').value,
+        jurisdiction: document.getElementById('jurisdiction').value,
+        decision_date: document.getElementById('decision_date').value,
+        docket_number: document.getElementById('docket_number').value,
+        parties: document.getElementById('parties').value,
+        judges: document.getElementById('judges').value,
+        authoring_judge: document.getElementById('authoring_judge').value
+    };
+    
+    fetch('/search_court_cases', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            displayError(data.error);
+        } else {
+            displayResults(data.results);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        displayError('An error occurred while searching.');
+    });
+}
+
+function displayResults(results) {
+    const resultsDiv = document.getElementById('searchResults');
+    if (!results || results.length === 0) {
+        resultsDiv.innerHTML = '<div class="alert alert-info">No results found.</div>';
+        return;
+    }
+    
+    let html = '';
+    results.forEach((result, index) => {
+        html += `
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">${result.title}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Citation:</strong> ${result.citation}</p>
+                            <p><strong>Court:</strong> ${result.court}</p>
+                            <p><strong>Jurisdiction:</strong> ${result.jurisdiction}</p>
+                            <p><strong>Decision Date:</strong> ${result.decision_date}</p>
+                            <p><strong>Calendar Date:</strong> ${result.calendar_date}</p>
+                            <p><strong>Docket Number:</strong> ${result.docket_number}</p>
+                            <p><strong>Parties:</strong> ${result.parties}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Judges:</strong> ${Array.isArray(result.judges) ? result.judges.join(', ') : result.judges}</p>
+                            <p><strong>Authoring Judge:</strong> ${result.authoring_judge}</p>
+                            <p><strong>Petitioner's Attorney:</strong> ${result.petitioner_attorney}</p>
+                            <p><strong>Respondent's Attorney:</strong> ${result.respondent_attorney}</p>
+                            <p><strong>Publisher:</strong> ${result.publisher}</p>
+                            <p><strong>Document Status:</strong> ${result.document_status}</p>
+                            <p><strong>Source:</strong> ${result.source}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <h6>Issue:</h6>
+                        <p>${result.issue}</p>
+                        
+                        <h6>Outcome:</h6>
+                        <p>${result.outcome}</p>
+                        
+                        <h6>Prior History:</h6>
+                        <p>${result.prior_history}</p>
+                        
+                        <h6>Statutes Cited:</h6>
+                        <p>${Array.isArray(result.statutes_cited) ? result.statutes_cited.join(', ') : result.statutes_cited}</p>
+                        
+                        <h6>Keywords:</h6>
+                        <p>${Array.isArray(result.keywords) ? result.keywords.join(', ') : result.keywords}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    resultsDiv.innerHTML = html;
+}
+
+function displayError(message) {
+    const resultsDiv = document.getElementById('searchResults');
+    resultsDiv.innerHTML = `<div class="alert alert-danger">${message}</div>`;
+}
+
+function resetForm() {
+    document.getElementById('searchForm').reset();
+    document.getElementById('searchResults').innerHTML = '';
+}
+</script>
+{% endblock %} 

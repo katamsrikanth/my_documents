@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Manage Document Collections</h1>
+    
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Upload New Document</h5>
+                    <form action="/upload" method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">Select a PDF or TXT file</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".pdf,.txt" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="docType" class="form-label">Document Type</label>
+                            <select class="form-select" id="docType" name="docType" required>
+                                <option value="">Select a type</option>
+                                {% for type in doc_types %}
+                                <option value="{{ type }}">{{ type }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Upload</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h5 class="card-title mb-0">Uploaded Documents</h5>
+                            <small class="text-muted">
+                                Showing {{ documents|length }} of {{ total_count }} documents
+                                {% if doc_type %}for type "{{ doc_type }}"{% endif %}
+                            </small>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <select class="form-select" id="docTypeFilter" onchange="filterDocuments()">
+                                <option value="">All Document Types</option>
+                                {% for type in doc_types %}
+                                <option value="{{ type }}" {% if type == doc_type %}selected{% endif %}>{{ type }}</option>
+                                {% endfor %}
+                            </select>
+                            <select class="form-select" id="perPage" onchange="changePerPage()">
+                                <option value="10" {% if per_page == 10 %}selected{% endif %}>10 per page</option>
+                                <option value="25" {% if per_page == 25 %}selected{% endif %}>25 per page</option>
+                                <option value="50" {% if per_page == 50 %}selected{% endif %}>50 per page</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    {% if documents %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Document Name</th>
+                                    <th>Type</th>
+                                    <th>Chunks</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for doc in documents %}
+                                <tr>
+                                    <td>{{ doc.name }}</td>
+                                    <td>{{ doc.type }}</td>
+                                    <td>{{ doc.count }}</td>
+                                    <td>
+                                        <button class="btn btn-danger btn-sm" onclick="deleteDocument('{{ doc.name }}')">
+                                            Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        No documents found{% if doc_type %} for document type "{{ doc_type }}"{% endif %}.
+                    </div>
+                    {% endif %}
+                    
+                    {% if total_pages > 1 %}
+                    <nav aria-label="Page navigation" class="mt-3">
+                        <ul class="pagination justify-content-center">
+                            {% if current_page > 1 %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ current_page - 1 }}&per_page={{ per_page }}&doc_type={{ doc_type }}" tabindex="-1">Previous</a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for page in range(max(1, current_page - 2), min(total_pages + 1, current_page + 3)) %}
+                            <li class="page-item {% if page == current_page %}active{% endif %}">
+                                <a class="page-link" href="?page={{ page }}&per_page={{ per_page }}&doc_type={{ doc_type }}">{{ page }}</a>
+                            </li>
+                            {% endfor %}
+                            
+                            {% if current_page < total_pages %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ current_page + 1 }}&per_page={{ per_page }}&doc_type={{ doc_type }}">Next</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function deleteDocument(documentName) {
+        if (confirm(`Are you sure you want to delete ${documentName}?`)) {
+            fetch(`/delete_document/${encodeURIComponent(documentName)}`, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Error deleting document');
+                }
+            })
+            .catch(error => {
+                alert('Error deleting document: ' + error.message);
+            });
+        }
+    }
+    
+    function filterDocuments() {
+        const docType = document.getElementById('docTypeFilter').value;
+        const perPage = document.getElementById('perPage').value;
+        window.location.href = `?page=1&per_page=${perPage}&doc_type=${encodeURIComponent(docType)}`;
+    }
+    
+    function changePerPage() {
+        const docType = document.getElementById('docTypeFilter').value;
+        const perPage = document.getElementById('perPage').value;
+        window.location.href = `?page=1&per_page=${perPage}&doc_type=${encodeURIComponent(docType)}`;
+    }
+</script>
+{% endblock %} 

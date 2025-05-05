@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="header">
+        <h1 class="text-center mb-4">Document Review</h1>
+        <p class="text-center text-muted">Upload a document to get a comprehensive review and suggestions</p>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Upload Document</h5>
+                    <form id="documentReviewForm" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="document" class="form-label">Select Document</label>
+                            <input type="file" class="form-control" id="document" name="document" accept=".pdf,.doc,.docx" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="documentType" class="form-label">Document Type</label>
+                            <select class="form-select" id="documentType" name="documentType" required>
+                                <option value="">Select document type</option>
+                                <option value="contract">Contract</option>
+                                <option value="agreement">Agreement</option>
+                                <option value="legal_opinion">Legal Opinion</option>
+                                <option value="court_pleading">Court Pleading</option>
+                                <option value="memorandum">Memorandum</option>
+                                <option value="brief">Brief</option>
+                                <option value="affidavit">Affidavit</option>
+                                <option value="deed">Deed</option>
+                                <option value="corporate_governance">Corporate Governance Document</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            Review Document
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Review Guidelines</h5>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">✓ Format and structure compliance</li>
+                        <li class="list-group-item">✓ Legal terminology accuracy</li>
+                        <li class="list-group-item">✓ Clause consistency and completeness</li>
+                        <li class="list-group-item">✓ Citation and reference verification</li>
+                        <li class="list-group-item">✓ Compliance with organizational standards</li>
+                        <li class="list-group-item">✓ Potential risks and improvements</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="reviewResults" class="mt-4"></div>
+</div>
+
+<script>
+    document.getElementById('documentReviewForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const submitButton = this.querySelector('button[type="submit"]');
+        const spinner = submitButton.querySelector('.spinner-border');
+        
+        // Show loading state
+        submitButton.disabled = true;
+        spinner.classList.remove('d-none');
+        
+        fetch('/review_document', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            const resultsDiv = document.getElementById('reviewResults');
+            if (data.error) {
+                resultsDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                return;
+            }
+            
+            let html = `
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Review Results</h5>
+                        <div class="review-section">
+                            <h6>Document Analysis</h6>
+                            <p>${data.analysis}</p>
+                        </div>
+                        <div class="review-section">
+                            <h6>Compliance Check</h6>
+                            <p>${data.compliance}</p>
+                        </div>
+                        <div class="review-section">
+                            <h6>Suggestions</h6>
+                            <ul class="list-group">
+                                ${data.suggestions.map(suggestion => `
+                                    <li class="list-group-item">${suggestion}</li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                        <div class="review-section">
+                            <h6>Recommendations</h6>
+                            <p>${data.recommendations}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            resultsDiv.innerHTML = html;
+        })
+        .catch(error => {
+            document.getElementById('reviewResults').innerHTML = 
+                `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        })
+        .finally(() => {
+            // Hide loading state
+            submitButton.disabled = false;
+            spinner.classList.add('d-none');
+        });
+    });
+</script>
+
+<style>
+    .review-section {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    .review-section h6 {
+        color: #0d6efd;
+        margin-bottom: 0.5rem;
+    }
+    .list-group-item {
+        border-left: 4px solid #28a745;
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %} 
