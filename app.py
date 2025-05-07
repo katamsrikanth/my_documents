@@ -26,6 +26,7 @@ import atexit
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
+from docx.shared import Inches
 
 # Load environment variables
 load_dotenv()
@@ -731,18 +732,15 @@ def perform_search(query, document_name=None):
         query = clean_text(query)
         try:
             logger.debug(f"Querying Document with query: '{query}', document_name: '{document_name}'")
-            if not document_name:
-                logger.error("No document_name provided for search with .with_where. Please select a document.")
-                return []
             
             # Create the query builder
-            query_builder = client.query.get("Document", ["document_name", "chunk_index", "content"])
+            query_builder = client.query.get("Document", ["document_name", "chunk_index", "content", "doc_type"])
             
             # Add BM25 search
             query_builder = query_builder.with_bm25(
-                query=query,
-                properties=["content"]
-            )
+                    query=query,
+                    properties=["content"]
+                )
             
             # Add where filter if provided
             if isinstance(document_name, dict):
@@ -775,7 +773,7 @@ def perform_search(query, document_name=None):
                 logger.info("General query or no results, fetching all chunks for document.")
                 all_chunks_result = (
                     client.query
-                    .get("Document", ["document_name", "chunk_index", "content"])
+                    .get("Document", ["document_name", "chunk_index", "content", "doc_type"])
                     .with_where({
                         "path": ["document_name"],
                         "operator": "Equal",
@@ -795,17 +793,29 @@ def perform_search(query, document_name=None):
                     """
                     focused_answer = generate_gemini_response(prompt)
                     if focused_answer:
+                        # Parse and format the answer
+                        soup = BeautifulSoup(focused_answer, 'html.parser')
+                        text = soup.get_text()
+                        # Replace markdown-style formatting
+                        text = text.replace("• **", "\n- ").replace(":**", ":").replace("**", "")
+                        # Add proper line breaks
+                        text = text.replace("\n\n", "<br><br>").replace("\n", "<br>")
                         logger.info("Returning Gemini summary for general query or no results.")
                         return [{
                             "document_name": document_name or "Answer",
-                            "content": focused_answer,
-                            "summary": focused_answer
+                            "content": text,
+                            "summary": text
                         }]
             # If results exist and not a general query, use Gemini on those chunks
             if results:
                 combined_content = "\n\n".join([r["content"] for r in results])
+                # Group results by document type
+                doc_types = set(r.get("doc_type", "Unknown") for r in results)
+                doc_type_info = f"Found in document types: {', '.join(doc_types)}" if doc_types else ""
+                
                 prompt = f"""
                 Based on the following information, provide a clear and well-structured answer to the question: "{query}"
+                {doc_type_info}
                 Your answer should:
                 1. Start with a brief introduction (1-2 sentences)
                 2. Use bullet points (•) for key information when there are multiple points
@@ -824,11 +834,18 @@ def perform_search(query, document_name=None):
                 """
                 focused_answer = generate_gemini_response(prompt)
                 if focused_answer:
+                    # Parse and format the answer
+                    soup = BeautifulSoup(focused_answer, 'html.parser')
+                    text = soup.get_text()
+                    # Replace markdown-style formatting
+                    text = text.replace("• **", "\n- ").replace(":**", ":").replace("**", "")
+                    # Add proper line breaks
+                    text = text.replace("\n\n", "<br><br>").replace("\n", "<br>")
                     logger.info("Returning focused Gemini answer.")
                     return [{
                         "document_name": "Answer",
-                        "content": focused_answer,
-                        "summary": focused_answer
+                        "content": text,
+                        "summary": text
                     }]
                 logger.info(f"Found {len(results)} matching results (after all filtering)")
                 return results
@@ -1559,7 +1576,7 @@ def download_document():
         title_run = title_paragraph.add_run(title)
         title_run.bold = True
         title_run.font.size = Pt(16)
-        title_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
         
         # Add spacing after title
         doc.add_paragraph()
@@ -1567,47 +1584,160 @@ def download_document():
         # Convert HTML content to DOCX paragraphs
         soup = BeautifulSoup(content, 'html.parser')
         
+        # Track numbered list state
+        list_counter = 1
+        in_numbered_list = False
+        
+        # Find the witness section
+        witness_section = None
+        for element in soup.find_all(['h2', 'h3', 'p', 'div']):
+            if element.get_text().strip().startswith('IN WITNESS WHEREOF'):
+                witness_section = element
+                break
+        
+        # Process content before witness section
         for element in soup.find_all(['h2', 'h3', 'p', 'div', 'ul', 'li']):
+            if element == witness_section:
+                break
+                
             if element.name == 'h2':
+                # Add spacing before heading
+                doc.add_paragraph()
                 text = element.get_text().strip()
                 heading = doc.add_paragraph()
                 heading_run = heading.add_run(text)
                 heading_run.bold = True
                 heading_run.font.size = Pt(14)
+                heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                # Add spacing after heading
+                doc.add_paragraph()
+                # Reset list counter for new section
+                list_counter = 1
+                in_numbered_list = False
             elif element.name == 'h3':
+                # Add spacing before subheading
+                doc.add_paragraph()
                 text = element.get_text().strip()
                 subheading = doc.add_paragraph()
                 subheading_run = subheading.add_run(text)
                 subheading_run.bold = True
                 subheading_run.font.size = Pt(12)
+                subheading.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                # Add spacing after subheading
+                doc.add_paragraph()
             elif element.name == 'p':
                 text = element.get_text().strip()
                 if text:
-                    doc.add_paragraph(text)
+                    p = doc.add_paragraph()
+                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    p.add_run(text)
+                    # Add spacing after paragraph
+                    doc.add_paragraph()
             elif element.name == 'div':
                 if 'section' in element.get('class', []):
                     text = element.get_text().strip()
                     if text:
-                        doc.add_paragraph(text)
+                        p = doc.add_paragraph()
+                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        p.add_run(text)
+                        # Add spacing after section
+                        doc.add_paragraph()
                 elif 'subsection' in element.get('class', []):
                     text = element.get_text().strip()
                     if text:
-                        doc.add_paragraph(text)
+                        p = doc.add_paragraph()
+                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        p.add_run(text)
+                        # Add spacing after subsection
+                        doc.add_paragraph()
             elif element.name == 'ul':
+                # Add spacing before list
+                doc.add_paragraph()
+                # Start a new numbered list
+                in_numbered_list = True
+                list_counter = 1
                 for li in element.find_all('li'):
                     text = li.get_text().strip()
                     if text:
-                        # Add bullet point
                         p = doc.add_paragraph()
-                        p.style = 'List Bullet'
-                        p.add_run(text)
+                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        p.add_run(f"{list_counter}. {text}")
+                        list_counter += 1
+                # Add spacing after list
+                doc.add_paragraph()
             elif element.name == 'li':
                 text = element.get_text().strip()
                 if text:
-                    # Add bullet point
                     p = doc.add_paragraph()
-                    p.style = 'List Bullet'
-                    p.add_run(text)
+                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    p.add_run(f"{list_counter}. {text}")
+                    list_counter += 1
+                    # Add spacing after list item
+                    doc.add_paragraph()
+        
+        # Process witness section
+        if witness_section:
+            # Add the witness section header
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            p.add_run(witness_section.get_text().strip())
+            doc.add_paragraph()
+            
+            # Create a table for the witness section
+            table = doc.add_table(rows=1, cols=2)
+            table.style = 'Table Grid'
+            
+            # Set column widths
+            for cell in table.columns[0].cells:
+                cell.width = Inches(3)
+            for cell in table.columns[1].cells:
+                cell.width = Inches(3)
+            
+            # Get all text after witness section
+            witness_content = []
+            current_element = witness_section.find_next()
+            while current_element:
+                if current_element.name in ['h2', 'h3', 'p', 'div']:
+                    text = current_element.get_text().strip()
+                    if text:
+                        witness_content.append(text)
+                current_element = current_element.find_next()
+            
+            # Split content into left and right columns
+            left_content = []
+            right_content = []
+            current = "left"
+            
+            for text in witness_content:
+                if "Lessee" in text or "Tenant" in text:
+                    current = "right"
+                elif "Lessor" in text or "Landlord" in text:
+                    current = "left"
+                
+                if current == "left":
+                    left_content.append(text)
+                else:
+                    right_content.append(text)
+            
+            # Add content to table cells
+            left_cell = table.cell(0, 0)
+            right_cell = table.cell(0, 1)
+            
+            # Add left content
+            for text in left_content:
+                p = left_cell.paragraphs[0] if len(left_cell.paragraphs) == 1 else left_cell.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                p.add_run(text)
+                if text != left_content[-1]:
+                    left_cell.add_paragraph()
+            
+            # Add right content
+            for text in right_content:
+                p = right_cell.paragraphs[0] if len(right_cell.paragraphs) == 1 else right_cell.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                p.add_run(text)
+                if text != right_content[-1]:
+                    right_cell.add_paragraph()
         
         # Save the document to the buffer
         doc.save(buffer)
