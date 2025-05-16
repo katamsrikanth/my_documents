@@ -14,13 +14,16 @@
                         <input type="text" class="form-control" id="title" name="title" required>
                     </div>
                     <div class="mb-3">
-                        <label for="docType" class="form-label">Document Type</label>
-                        <select class="form-select" id="docType" name="docType" required>
-                            <option value="">Select a document type</option>
-                            {% for doc_type in doc_types %}
-                            <option value="{{ doc_type }}">{{ doc_type }}</option>
-                            {% endfor %}
+                        <label for="docType" class="form-label">Legal Templates</label>
+                        <select class="form-select" id="docType" name="docType">
+                            <option value="">Select a legal template (optional)</option>
+                            {% if legal_templates %}
+                                {% for template in legal_templates %}
+                                <option value="{{ template.name }}">{{ template.name }}</option>
+                                {% endfor %}
+                            {% endif %}
                         </select>
+                        <div class="form-text">If no template is selected, the system will choose the most appropriate template based on your requirements.</div>
                     </div>
                     <div class="mb-3">
                         <label for="requirements" class="form-label">Detailed Requirements</label>
@@ -37,8 +40,8 @@
                 <div class="alert alert-info">
                     <strong>Knowledge Distribution:</strong>
                     <ul class="mb-0">
-                        <li>80% from Vector Collection</li>
-                        <li>20% from External Sources</li>
+                        <li>90% from Vector Collection</li>
+                        <li>10% from External Sources</li>
                     </ul>
                 </div>
                 <div id="loading" class="d-none">
@@ -162,7 +165,7 @@
             },
             body: JSON.stringify({
                 title: document.getElementById('title').value,
-                docType: document.getElementById('docType').value,
+                docType: document.getElementById('docType').value || 'Legal templates',
                 requirements: `<ul>${formattedRequirements}</ul>`
             })
         })

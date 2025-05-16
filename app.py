@@ -27,6 +27,11 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 from docx.shared import Inches
+from models.client import Client
+from models.case import Case
+from models.appointment import Appointment
+from models.initial_inquiry import InitialInquiry
+from models.attorney import Attorney
 
 # Load environment variables
 load_dotenv()
@@ -373,21 +378,17 @@ def extract_text_from_pdf(pdf_path):
             logger.warning(f"Could not extract form fields: {str(e)}")
         
         # Then extract regular text from pages
-        try:
-            for i, page in enumerate(reader.pages):
-                try:
-                    logger.debug(f"Processing page {i+1}")
-                    page_text = page.extract_text()
-                    if page_text:
-                        # Clean the extracted text
-                        page_text = clean_text(page_text)
-                        text += page_text + "\n"
-                except Exception as e:
-                    logger.warning(f"Error processing page {i+1}: {str(e)}")
-                    continue
-        except Exception as e:
-            logger.error(f"Error processing pages: {str(e)}")
-            return None
+        for i, page in enumerate(reader.pages):
+            try:
+                logger.debug(f"Processing page {i+1}")
+                page_text = page.extract_text()
+                if page_text:
+                    # Clean the extracted text
+                    page_text = clean_text(page_text)
+                    text += page_text + "\n"
+            except Exception as e:
+                logger.warning(f"Error processing page {i+1}: {str(e)}")
+                continue
         
         if not text.strip():
             logger.warning("No text could be extracted from the PDF")
@@ -1378,9 +1379,11 @@ def generate_documentation_with_ai(title, requirements, doc_type):
         if vector_results:
             logger.info("Found documents:")
             for r in vector_results:
-                logger.info(f"- {r['document_name']}")
+                logger.info(f"- {r['document_name']} (Type: {r.get('doc_type', 'Unknown')})")
+        
         # Check if we have enough relevant data
         if not vector_results:
+            logger.warning("No relevant documents found in the vector collection")
             return """
             <div class="alert alert-warning">
                 <h3>No Relevant Data Found</h3>
@@ -1395,15 +1398,38 @@ def generate_documentation_with_ai(title, requirements, doc_type):
                 to ensure accuracy and reliability of the generated document.</p>
             </div>
             """
+        
+        # Combine all relevant content
         vector_knowledge = "\n\n".join([result["content"] for result in vector_results])
+        
         # Use Gemini API to generate the document
         prompt = f"""
-        You are an expert legal document generator. Please create a {doc_type} document titled '{title}' based on the following requirements and knowledge.\n\nRequirements:\n{requirements}\n\nRelevant Knowledge:\n{vector_knowledge}\n\nThe document should be well-structured, use proper legal formatting, and be suitable for professional use. Format the document using HTML tags for proper display.\n\nGenerated Document:
+        You are an expert legal document generator. Please create a {doc_type} document titled '{title}' based on the following requirements and knowledge.
+        
+        Requirements:
+        {requirements}
+        
+        Relevant Knowledge:
+        {vector_knowledge}
+        
+        The document should:
+        1. Be well-structured and professionally formatted
+        2. Include all necessary legal clauses and sections
+        3. Be suitable for professional use
+        4. Follow standard legal document conventions
+        5. Include proper headings and sections
+        6. Use clear and precise language
+        
+        Format the document using HTML tags for proper display.
+        
+        Generated Document:
         """
+        
         document_content = generate_gemini_response(prompt)
         if not document_content:
             logger.error("Gemini API did not return a document.")
             return "<div class='alert alert-danger'>Failed to generate document using Gemini AI.</div>"
+            
         return document_content
     except Exception as e:
         logging.error(f"Error generating documentation: {str(e)}")
@@ -1481,11 +1507,71 @@ def get_unique_document_types():
 def document_creation():
     """Render the document creation dashboard."""
     try:
-        doc_types = get_unique_document_types()
-        return render_template('document_creation.html', doc_types=doc_types)
+        logger.info("Starting document_creation route")
+        
+        # Get all documents with pagination
+        offset = 0
+        batch_size = 1000
+        all_documents = []
+        
+        while True:
+            result = (
+                client.query
+                .get("Document", ["document_name", "doc_type"])
+                .with_additional("id")
+                .with_where({
+                    "path": ["doc_type"],
+                    "operator": "Equal",
+                    "valueString": "Legal templates"
+                })
+                .with_limit(batch_size)
+                .with_offset(offset)
+                .do()
+            )
+            
+            if not result or "data" not in result or "Get" not in result["data"] or "Document" not in result["data"]["Get"]:
+                break
+                
+            documents = result["data"]["Get"]["Document"]
+            if not documents:
+                break
+                
+            all_documents.extend(documents)
+            offset += batch_size
+        
+        logger.info(f"Total legal template documents found: {len(all_documents)}")
+        
+        # Process documents to get unique legal templates
+        legal_templates = {}
+        
+        for obj in all_documents:
+            doc_name = obj.get("document_name", "Unknown")
+            doc_type = obj.get("doc_type", "Unknown")
+            
+            logger.info(f"Processing document: {doc_name} with type: {doc_type}")
+            
+            if doc_type.strip().lower() == "legal templates":
+                # Only add if we haven't seen this document name before
+                if doc_name not in legal_templates:
+                    legal_templates[doc_name] = {"name": doc_name, "type": doc_type}
+                    logger.info(f"Added legal template: {doc_name}")
+        
+        # Convert dictionary to list and sort by name
+        legal_templates_list = list(legal_templates.values())
+        legal_templates_list.sort(key=lambda x: x["name"])
+        
+        logger.info(f"Final unique legal templates: {json.dumps(legal_templates_list, indent=2)}")
+        
+        return render_template('document_creation.html', 
+                             legal_templates=legal_templates_list,
+                             other_types=[])
     except Exception as e:
         logger.error(f"Error in document creation route: {str(e)}")
-        return render_template('document_creation.html', doc_types=[], error=str(e))
+        logger.error(f"Stack trace: {traceback.format_exc()}")
+        return render_template('document_creation.html', 
+                             legal_templates=[],
+                             other_types=[],
+                             error=str(e))
 
 def search_vector_collection_by_type(query, doc_type, limit=5):
     """Search the vector collection for relevant content filtered by document type."""
@@ -1499,15 +1585,25 @@ def search_vector_collection_by_type(query, doc_type, limit=5):
         # Search in the Document collection with type filter
         result = (
             client.query
-            .get("Document", ["document_name", "content"])
+            .get("Document", ["document_name", "content", "doc_type"])
             .with_bm25(
                 query=query,
                 properties=["content"]
             )
             .with_where({
+                "operator": "And",
+                "operands": [
+                    {
                 "path": ["doc_type"],
+                        "operator": "Equal",
+                        "valueString": "Legal templates"
+                    },
+                    {
+                        "path": ["document_name"],
                 "operator": "Equal",
                 "valueString": doc_type
+                    }
+                ]
             })
             .with_limit(limit)
             .do()
@@ -2578,6 +2674,356 @@ def get_documents():
         logger.error(f"Error fetching documents: {str(e)}")
         logger.error(f"Stack trace: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/clients')
+@login_required
+def clients():
+    search_query = request.args.get('search', '')
+    if search_query:
+        clients = Client.search(search_query)
+    else:
+        clients = Client.get_all()
+    return render_template('clients.html', clients=clients)
+
+@app.route('/clients/add')
+@login_required
+def add_client_page():
+    return render_template('add_client.html')
+
+@app.route('/client', methods=['POST'])
+@login_required
+def add_client():
+    try:
+        client = Client(
+            first_name=request.form['first_name'],
+            last_name=request.form['last_name'],
+            email=request.form['email'],
+            phone_number=request.form['phone_number'],
+            alternate_number=request.form.get('alternate_number'),
+            address=request.form.get('address'),
+            city=request.form.get('city'),
+            state=request.form.get('state'),
+            zip_code=request.form.get('zip_code'),
+            country=request.form.get('country'),
+            preferred_contact=request.form.get('preferred_contact', 'email'),
+            client_type=request.form['client_type']
+        )
+        client.save()
+        flash('Client added successfully!', 'success')
+    except Exception as e:
+        flash(f'Error adding client: {str(e)}', 'error')
+    return redirect(url_for('clients'))
+
+@app.route('/client/<client_id>')
+@login_required
+def get_client(client_id):
+    client = Client.get_by_id(client_id)
+    if client:
+        # Convert ObjectId to string for JSON serialization
+        client['_id'] = str(client['_id'])
+        return jsonify(client)
+    return jsonify({'error': 'Client not found'}), 404
+
+@app.route('/client/<client_id>', methods=['PUT'])
+@login_required
+def update_client(client_id):
+    try:
+        update_data = request.json
+        result = Client.update(client_id, update_data)
+        if result.modified_count > 0:
+            return jsonify({'success': True})
+        return jsonify({'error': 'Client not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/client/<client_id>', methods=['DELETE'])
+@login_required
+def delete_client(client_id):
+    try:
+        result = Client.delete(client_id)
+        if result.deleted_count > 0:
+            return jsonify({'success': True})
+        return jsonify({'error': 'Client not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/cases')
+@login_required
+def cases():
+    search_query = request.args.get('search', '')
+    if search_query:
+        cases = Case.search(search_query)
+    else:
+        cases = Case.get_all()
+    
+    # Get client names for each case
+    for case in cases:
+        client = Client.get_by_id(case['client_id'])
+        case['client_name'] = f"{client['first_name']} {client['last_name']}" if client else 'Unknown Client'
+    
+    clients = Client.get_all()  # For the add case form
+    return render_template('cases.html', cases=cases, clients=clients)
+
+@app.route('/cases/add', methods=['GET', 'POST'])
+@login_required
+def add_case_page():  # Changed from add_case to add_case_page
+    if request.method == 'GET':
+        clients = Client.get_all()
+        # Get client_id from query parameters if it exists
+        selected_client_id = request.args.get('client_id')
+        return render_template('add_case.html', clients=clients, selected_client_id=selected_client_id)
+    
+    try:
+        case_data = {
+            'client_id': request.form['client_id'],
+            'title': request.form['title'],
+            'description': request.form['description'],
+            'case_type': request.form['case_type'],
+            'court_name': request.form['court_name'],
+            'case_number': request.form['case_number'],
+            'status': request.form['status'],
+            'start_date': request.form['start_date'],
+            'end_date': request.form['end_date'] if request.form['end_date'] else None,
+            'assigned_attorney_id': session.get('user_id')
+        }
+        
+        case = Case(**case_data)
+        case.save()
+        flash('Case added successfully!', 'success')
+        return redirect(url_for('cases'))
+    except Exception as e:
+        flash(f'Error adding case: {str(e)}', 'error')
+        return redirect(url_for('add_case_page'))  # Updated redirect to use new function name
+
+@app.route('/case/<case_id>')
+@login_required
+def get_case(case_id):
+    case = Case.get_by_id(case_id)
+    if case:
+        return jsonify(case)
+    return jsonify({'error': 'Case not found'}), 404
+
+@app.route('/case/<case_id>', methods=['PUT'])
+@login_required
+def update_case(case_id):
+    case = Case.get_by_id(case_id)
+    if not case:
+        return jsonify({'error': 'Case not found'}), 404
+    
+    try:
+        update_data = request.get_json()
+        Case.update(case_id, update_data)
+        return jsonify({'message': 'Case updated successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/case/<case_id>', methods=['DELETE'])
+@login_required
+def delete_case(case_id):
+    case = Case.get_by_id(case_id)
+    if not case:
+        return jsonify({'error': 'Case not found'}), 404
+    
+    try:
+        Case.delete(case_id)
+        return jsonify({'message': 'Case deleted successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/client/<client_id>/cases')
+@login_required
+def get_client_cases(client_id):
+    try:
+        cases = Case.get_by_client_id(client_id)
+        return jsonify(cases)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/appointments')
+@login_required
+def appointments():
+    search_query = request.args.get('search', '')
+    if search_query:
+        appointments = Appointment.search(search_query)
+    else:
+        appointments = Appointment.get_all()
+    
+    # Get case titles for each appointment
+    for appointment in appointments:
+        case = Case.get_by_id(appointment['case_id'])
+        appointment['case_title'] = case['title'] if case else 'Unknown Case'
+    
+    cases = Case.get_all()  # For the add appointment form
+    return render_template('appointments.html', appointments=appointments, cases=cases)
+
+@app.route('/appointment', methods=['POST'])
+@login_required
+def create_appointment():
+    try:
+        # Validate required fields
+        required_fields = ['case_id', 'date_time', 'location', 'purpose', 'status']
+        for field in required_fields:
+            if not request.form.get(field):
+                return jsonify({'success': False, 'error': f'{field} is required'}), 400
+
+        # Validate date_time format
+        try:
+            date_time = datetime.strptime(request.form['date_time'], '%Y-%m-%dT%H:%M')
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid date and time format'}), 400
+
+        # Validate case_id exists
+        case = Case.get_by_id(request.form['case_id'])
+        if not case:
+            return jsonify({'success': False, 'error': 'Invalid case selected'}), 400
+
+        appointment_data = {
+            'case_id': request.form['case_id'],
+            'date_time': date_time,
+            'location': request.form['location'],
+            'purpose': request.form['purpose'],
+            'status': request.form['status']
+        }
+        
+        appointment = Appointment(**appointment_data)
+        appointment.save()
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Error creating appointment: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/appointment/<appointment_id>')
+@login_required
+def get_appointment(appointment_id):
+    try:
+        appointment = Appointment.get_by_id(appointment_id)
+        if appointment:
+            case = Case.get_by_id(appointment['case_id'])
+            appointment['case_title'] = case['title'] if case else 'Unknown Case'
+            return jsonify(appointment)
+        return jsonify({'error': 'Appointment not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/appointment/<appointment_id>', methods=['PUT'])
+@login_required
+def update_appointment(appointment_id):
+    try:
+        update_data = request.json
+        if 'date_time' in update_data:
+            update_data['date_time'] = datetime.strptime(update_data['date_time'], '%Y-%m-%dT%H:%M')
+        
+        appointment = Appointment.update(appointment_id, update_data)
+        return jsonify({'success': True, 'appointment': appointment})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/appointment/<appointment_id>', methods=['DELETE'])
+@login_required
+def delete_appointment(appointment_id):
+    try:
+        Appointment.delete(appointment_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/initial_inquiry')
+@login_required
+def initial_inquiry_page():
+    """Display the initial inquiry page with recent inquiries."""
+    # Create the collection if it doesn't exist
+    InitialInquiry.create_collection()
+    
+    # Get recent inquiries
+    inquiries = InitialInquiry.get_recent(5)  # Get 5 most recent inquiries
+    
+    return render_template('initial_inquiry.html', inquiries=inquiries)
+
+@app.route('/add_initial_inquiry')
+@login_required
+def add_initial_inquiry_page():
+    """Display the form for adding a new initial inquiry."""
+    # Get list of attorneys for the dropdown
+    attorneys = Attorney.get_all()
+    return render_template('add_initial_inquiry.html', attorneys=attorneys)
+
+@app.route('/create_initial_inquiry', methods=['POST'])
+@login_required
+def create_initial_inquiry():
+    try:
+        # Create new inquiry
+        inquiry = InitialInquiry(
+            fullName=request.form.get('fullName'),
+            phoneNumber=request.form.get('phoneNumber'),
+            email=request.form.get('email'),
+            appointmentType=request.form.get('appointmentType'),
+            preferredDate=request.form.get('preferredDate'),
+            preferredTime=request.form.get('preferredTime'),
+            referralSource=request.form.get('referralSource'),
+            assignedAttorney=request.form.get('assignedAttorney'),
+            caseDescription=request.form.get('caseDescription'),
+            notes=request.form.get('notes')
+        )
+        inquiry.save()
+        
+        # Create appointment if preferred date and time are provided
+        if inquiry.preferredDate and inquiry.preferredTime:
+            appointment = Appointment(
+                case_id=None,  # No case yet
+                date_time=datetime.strptime(f"{inquiry.preferredDate} {inquiry.preferredTime}", "%Y-%m-%d %H:%M"),
+                location="Office",
+                purpose=f"Initial {inquiry.appointmentType}: {inquiry.caseDescription[:100]}",
+                status="Scheduled"
+            )
+            appointment.save()
+        
+        flash('Initial inquiry created successfully!', 'success')
+        return redirect(url_for('initial_inquiry_page'))
+    except Exception as e:
+        flash(f'Error creating initial inquiry: {str(e)}', 'error')
+        return redirect(url_for('initial_inquiry_page'))
+
+@app.route('/initial_inquiry/<inquiry_id>', methods=['GET'])
+@login_required
+def get_inquiry(inquiry_id):
+    try:
+        inquiry = InitialInquiry.get_by_id(inquiry_id)
+        if inquiry:
+            return jsonify(inquiry)
+        return jsonify({'error': 'Inquiry not found'}), 404
+    except Exception as e:
+        logger.error(f"Error getting inquiry {inquiry_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/initial_inquiry/<inquiry_id>', methods=['PUT'])
+@login_required
+def update_inquiry(inquiry_id):
+    try:
+        data = request.get_json()
+        if InitialInquiry.update(inquiry_id, data):
+            return jsonify({'message': 'Inquiry updated successfully'})
+        return jsonify({'error': 'Inquiry not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/initial_inquiry/<inquiry_id>', methods=['DELETE'])
+@login_required
+def delete_inquiry(inquiry_id):
+    try:
+        if InitialInquiry.delete(inquiry_id):
+            return jsonify({'message': 'Inquiry deleted successfully'})
+        return jsonify({'error': 'Inquiry not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/client/<client_id>/edit')
+@login_required
+def edit_client_page(client_id):
+    client = Client.get_by_id(client_id)
+    if client:
+        return render_template('edit_client.html', client=client)
+    flash('Client not found', 'error')
+    return redirect(url_for('clients'))
 
 if __name__ == '__main__':
     try:

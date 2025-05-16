@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Edit Client</h2>
+        <a href="{{ url_for('clients') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Clients
+        </a>
+    </div>
+    
+    <div class="card">
+        <div class="card-body">
+            <form id="editClientForm" method="POST" action="{{ url_for('update_client', client_id=client.client_id) }}">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="first_name" class="form-label">First Name *</label>
+                        <input type="text" class="form-control" id="first_name" name="first_name" value="{{ client.first_name }}" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="last_name" class="form-label">Last Name *</label>
+                        <input type="text" class="form-control" id="last_name" name="last_name" value="{{ client.last_name }}" required>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="email" class="form-label">Email *</label>
+                        <input type="email" class="form-control" id="email" name="email" value="{{ client.email }}" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="phone_number" class="form-label">Phone Number *</label>
+                        <input type="tel" class="form-control" id="phone_number" name="phone_number" value="{{ client.phone_number }}" required>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="alternate_number" class="form-label">Alternate Number</label>
+                        <input type="tel" class="form-control" id="alternate_number" name="alternate_number" value="{{ client.alternate_number or '' }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="client_type" class="form-label">Client Type *</label>
+                        <select class="form-select" id="client_type" name="client_type" required>
+                            <option value="Individual" {% if client.client_type == 'Individual' %}selected{% endif %}>Individual</option>
+                            <option value="Business" {% if client.client_type == 'Business' %}selected{% endif %}>Business</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="address" class="form-label">Address</label>
+                    <textarea class="form-control" id="address" name="address" rows="2">{{ client.address or '' }}</textarea>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="city" class="form-label">City</label>
+                        <input type="text" class="form-control" id="city" name="city" value="{{ client.city or '' }}">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="state" class="form-label">State</label>
+                        <select class="form-select" id="state" name="state">
+                            <option value="">Select State</option>
+                            <option value="AL" {% if client.state == 'AL' %}selected{% endif %}>Alabama</option>
+                            <option value="AK" {% if client.state == 'AK' %}selected{% endif %}>Alaska</option>
+                            <option value="AZ" {% if client.state == 'AZ' %}selected{% endif %}>Arizona</option>
+                            <option value="AR" {% if client.state == 'AR' %}selected{% endif %}>Arkansas</option>
+                            <option value="CA" {% if client.state == 'CA' %}selected{% endif %}>California</option>
+                            <option value="CO" {% if client.state == 'CO' %}selected{% endif %}>Colorado</option>
+                            <option value="CT" {% if client.state == 'CT' %}selected{% endif %}>Connecticut</option>
+                            <option value="DE" {% if client.state == 'DE' %}selected{% endif %}>Delaware</option>
+                            <option value="FL" {% if client.state == 'FL' %}selected{% endif %}>Florida</option>
+                            <option value="GA" {% if client.state == 'GA' %}selected{% endif %}>Georgia</option>
+                            <option value="HI" {% if client.state == 'HI' %}selected{% endif %}>Hawaii</option>
+                            <option value="ID" {% if client.state == 'ID' %}selected{% endif %}>Idaho</option>
+                            <option value="IL" {% if client.state == 'IL' %}selected{% endif %}>Illinois</option>
+                            <option value="IN" {% if client.state == 'IN' %}selected{% endif %}>Indiana</option>
+                            <option value="IA" {% if client.state == 'IA' %}selected{% endif %}>Iowa</option>
+                            <option value="KS" {% if client.state == 'KS' %}selected{% endif %}>Kansas</option>
+                            <option value="KY" {% if client.state == 'KY' %}selected{% endif %}>Kentucky</option>
+                            <option value="LA" {% if client.state == 'LA' %}selected{% endif %}>Louisiana</option>
+                            <option value="ME" {% if client.state == 'ME' %}selected{% endif %}>Maine</option>
+                            <option value="MD" {% if client.state == 'MD' %}selected{% endif %}>Maryland</option>
+                            <option value="MA" {% if client.state == 'MA' %}selected{% endif %}>Massachusetts</option>
+                            <option value="MI" {% if client.state == 'MI' %}selected{% endif %}>Michigan</option>
+                            <option value="MN" {% if client.state == 'MN' %}selected{% endif %}>Minnesota</option>
+                            <option value="MS" {% if client.state == 'MS' %}selected{% endif %}>Mississippi</option>
+                            <option value="MO" {% if client.state == 'MO' %}selected{% endif %}>Missouri</option>
+                            <option value="MT" {% if client.state == 'MT' %}selected{% endif %}>Montana</option>
+                            <option value="NE" {% if client.state == 'NE' %}selected{% endif %}>Nebraska</option>
+                            <option value="NV" {% if client.state == 'NV' %}selected{% endif %}>Nevada</option>
+                            <option value="NH" {% if client.state == 'NH' %}selected{% endif %}>New Hampshire</option>
+                            <option value="NJ" {% if client.state == 'NJ' %}selected{% endif %}>New Jersey</option>
+                            <option value="NM" {% if client.state == 'NM' %}selected{% endif %}>New Mexico</option>
+                            <option value="NY" {% if client.state == 'NY' %}selected{% endif %}>New York</option>
+                            <option value="NC" {% if client.state == 'NC' %}selected{% endif %}>North Carolina</option>
+                            <option value="ND" {% if client.state == 'ND' %}selected{% endif %}>North Dakota</option>
+                            <option value="OH" {% if client.state == 'OH' %}selected{% endif %}>Ohio</option>
+                            <option value="OK" {% if client.state == 'OK' %}selected{% endif %}>Oklahoma</option>
+                            <option value="OR" {% if client.state == 'OR' %}selected{% endif %}>Oregon</option>
+                            <option value="PA" {% if client.state == 'PA' %}selected{% endif %}>Pennsylvania</option>
+                            <option value="RI" {% if client.state == 'RI' %}selected{% endif %}>Rhode Island</option>
+                            <option value="SC" {% if client.state == 'SC' %}selected{% endif %}>South Carolina</option>
+                            <option value="SD" {% if client.state == 'SD' %}selected{% endif %}>South Dakota</option>
+                            <option value="TN" {% if client.state == 'TN' %}selected{% endif %}>Tennessee</option>
+                            <option value="TX" {% if client.state == 'TX' %}selected{% endif %}>Texas</option>
+                            <option value="UT" {% if client.state == 'UT' %}selected{% endif %}>Utah</option>
+                            <option value="VT" {% if client.state == 'VT' %}selected{% endif %}>Vermont</option>
+                            <option value="VA" {% if client.state == 'VA' %}selected{% endif %}>Virginia</option>
+                            <option value="WA" {% if client.state == 'WA' %}selected{% endif %}>Washington</option>
+                            <option value="WV" {% if client.state == 'WV' %}selected{% endif %}>West Virginia</option>
+                            <option value="WI" {% if client.state == 'WI' %}selected{% endif %}>Wisconsin</option>
+                            <option value="WY" {% if client.state == 'WY' %}selected{% endif %}>Wyoming</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="zip_code" class="form-label">Zip Code</label>
+                        <input type="text" class="form-control" id="zip_code" name="zip_code" value="{{ client.zip_code or '' }}">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="country" class="form-label">Country</label>
+                        <input type="text" class="form-control" id="country" name="country" value="{{ client.country or '' }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="preferred_contact" class="form-label">Preferred Contact Method</label>
+                        <select class="form-select" id="preferred_contact" name="preferred_contact">
+                            <option value="email" {% if client.preferred_contact == 'email' %}selected{% endif %}>Email</option>
+                            <option value="phone" {% if client.preferred_contact == 'phone' %}selected{% endif %}>Phone</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="Active" {% if client.status == 'Active' %}selected{% endif %}>Active</option>
+                            <option value="Inactive" {% if client.status == 'Inactive' %}selected{% endif %}>Inactive</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{{ url_for('clients') }}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Update Client</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('editClientForm');
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        const data = {};
+        formData.forEach((value, key) => {
+            data[key] = value;
+        });
+        
+        fetch(form.action, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = "{{ url_for('clients') }}";
+            } else {
+                alert('Error updating client');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error updating client');
+        });
+    });
+});
+</script>
+{% endblock %} 

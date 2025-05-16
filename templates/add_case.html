@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Add New Case</h2>
+        <a href="{{ url_for('cases') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Cases
+        </a>
+    </div>
+    
+    <div class="card">
+        <div class="card-body">
+            <form id="addCaseForm" method="POST" action="{{ url_for('add_case_page') }}">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="client_id" class="form-label">Client *</label>
+                        <select class="form-select" id="client_id" name="client_id" required>
+                            <option value="">Select Client</option>
+                            {% for client in clients %}
+                            <option value="{{ client.client_id }}" {% if selected_client_id == client.client_id %}selected{% endif %}>{{ client.first_name }} {{ client.last_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="title" class="form-label">Case Title *</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="case_type" class="form-label">Case Type *</label>
+                        <select class="form-select" id="case_type" name="case_type" required>
+                            <option value="">Select Case Type</option>
+                            <option value="Civil">Civil</option>
+                            <option value="Criminal">Criminal</option>
+                            <option value="Family">Family</option>
+                            <option value="Corporate">Corporate</option>
+                            <option value="Real Estate">Real Estate</option>
+                            <option value="Intellectual Property">Intellectual Property</option>
+                            <option value="Employment">Employment</option>
+                            <option value="Immigration">Immigration</option>
+                            <option value="Bankruptcy">Bankruptcy</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="court_name" class="form-label">Court Name *</label>
+                        <input type="text" class="form-control" id="court_name" name="court_name" required>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="case_number" class="form-label">Case Number *</label>
+                        <input type="text" class="form-control" id="case_number" name="case_number" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="status" class="form-label">Status *</label>
+                        <select class="form-select" id="status" name="status" required>
+                            <option value="Open">Open</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Closed">Closed</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="start_date" class="form-label">Start Date *</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="end_date" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date">
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description *</label>
+                    <textarea class="form-control" id="description" name="description" rows="4" required></textarea>
+                </div>
+                
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{{ url_for('cases') }}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Add Case</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

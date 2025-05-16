@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="fas fa-phone-alt me-2"></i>New Initial Inquiry</h2>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <form action="{{ url_for('create_initial_inquiry') }}" method="POST">
+                        <div class="mb-3">
+                            <label for="fullName" class="form-label">Full Name *</label>
+                            <input type="text" class="form-control" id="fullName" name="fullName" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="phoneNumber" class="form-label">Phone Number *</label>
+                            <input type="tel" class="form-control" id="phoneNumber" name="phoneNumber" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="appointmentType" class="form-label">Appointment Type *</label>
+                            <select class="form-select" id="appointmentType" name="appointmentType" required>
+                                <option value="">Select Type</option>
+                                <option value="General">General Inquiry</option>
+                                <option value="Consultation">Initial Consultation</option>
+                                <option value="Follow-up">Follow-up</option>
+                                <option value="Case Review">Case Review</option>
+                            </select>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="preferredDate" class="form-label">Preferred Date</label>
+                                    <input type="date" class="form-control" id="preferredDate" name="preferredDate">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="preferredTime" class="form-label">Preferred Time</label>
+                                    <input type="time" class="form-control" id="preferredTime" name="preferredTime">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="referralSource" class="form-label">Referral Source</label>
+                            <input type="text" class="form-control" id="referralSource" name="referralSource">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="assignedAttorney" class="form-label">Assigned Attorney</label>
+                            <select class="form-select" id="assignedAttorney" name="assignedAttorney">
+                                <option value="">Select Attorney</option>
+                                {% for attorney in attorneys %}
+                                <option value="{{ attorney.attorney_id }}">{{ attorney.first_name }} {{ attorney.last_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="caseDescription" class="form-label">Case Description *</label>
+                            <textarea class="form-control" id="caseDescription" name="caseDescription" rows="3" required></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('initial_inquiry_page') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Back
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Save Inquiry
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
