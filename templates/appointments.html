@@ -151,34 +151,67 @@ function searchAppointments() {
 }
 
 function viewAppointment(appointmentId) {
+    console.log('Viewing appointment:', appointmentId); // Debug log
+    
+    // Show loading state
+    const modalBody = document.getElementById('appointmentDetails');
+    modalBody.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading appointment details...</div>';
+    
+    // Show the modal first
+    const viewModal = new bootstrap.Modal(document.getElementById('viewAppointmentModal'));
+    viewModal.show();
+    
     fetch(`/appointment/${appointmentId}`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(appointment => {
+            console.log('Appointment data:', appointment); // Debug log
+            
             const detailsHtml = `
                 <div class="mb-3">
-                    <strong>Case:</strong> ${appointment.case_title}
+                    <strong>Case:</strong> ${appointment.case_title || 'N/A'}
                 </div>
                 <div class="mb-3">
                     <strong>Date & Time:</strong> ${new Date(appointment.date_time).toLocaleString()}
                 </div>
                 <div class="mb-3">
-                    <strong>Location:</strong> ${appointment.location}
+                    <strong>Location:</strong> ${appointment.location || 'N/A'}
                 </div>
                 <div class="mb-3">
-                    <strong>Purpose:</strong> ${appointment.purpose}
+                    <strong>Purpose:</strong> ${appointment.purpose || 'N/A'}
                 </div>
                 <div class="mb-3">
                     <strong>Status:</strong> 
-                    <span class="badge ${getStatusColor(appointment.status)}">${appointment.status}</span>
+                    <span class="badge ${getStatusColor(appointment.status)}">${appointment.status || 'N/A'}</span>
                 </div>
             `;
-            document.getElementById('appointmentDetails').innerHTML = detailsHtml;
-            new bootstrap.Modal(document.getElementById('viewAppointmentModal')).show();
+            modalBody.innerHTML = detailsHtml;
         })
         .catch(error => {
-            console.error('Error:', error);
-            alert('Error loading appointment details');
+            console.error('Error loading appointment:', error);
+            modalBody.innerHTML = `
+                <div class="alert alert-danger">
+                    Error loading appointment details: ${error.message}
+                </div>
+            `;
         });
+}
+
+function getStatusColor(status) {
+    switch (status?.toLowerCase()) {
+        case 'scheduled':
+            return 'bg-primary';
+        case 'completed':
+            return 'bg-success';
+        case 'cancelled':
+            return 'bg-danger';
+        default:
+            return 'bg-secondary';
+    }
 }
 
 function editAppointment(appointmentId) {

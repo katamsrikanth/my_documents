@@ -5,16 +5,19 @@ from bson import ObjectId
 from database import get_db
 
 class Case:
-    def __init__(self, client_id, case_number, case_type, status, description, start_date, end_date=None, 
-                 assigned_to=None, priority='Medium', notes=None, documents=None):
+    def __init__(self, client_id, case_number, case_type, status, description, start_date, title=None, court_name=None, end_date=None, 
+                 assigned_to=None, assigned_attorney_id=None, priority='Medium', notes=None, documents=None):
         self.client_id = client_id
         self.case_number = case_number
         self.case_type = case_type
         self.status = status
         self.description = description
+        self.title = title
+        self.court_name = court_name
         self.start_date = start_date if isinstance(start_date, datetime) else datetime.strptime(start_date, '%Y-%m-%d')
         self.end_date = end_date if isinstance(end_date, datetime) else datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
         self.assigned_to = assigned_to
+        self.assigned_attorney_id = assigned_attorney_id
         self.priority = priority
         self.notes = notes or []
         self.documents = documents or []
@@ -40,9 +43,12 @@ class Case:
             'case_type': self.case_type,
             'status': self.status,
             'description': self.description,
+            'title': self.title,
+            'court_name': self.court_name,
             'start_date': self.start_date,
             'end_date': self.end_date,
             'assigned_to': self.assigned_to,
+            'assigned_attorney_id': self.assigned_attorney_id,
             'priority': self.priority,
             'notes': self.notes,
             'documents': self.documents,
@@ -58,7 +64,8 @@ class Case:
         cases = list(db.cases.find())
         for case in cases:
             case['_id'] = str(case['_id'])
-            case['client_id'] = str(case['client_id'])
+            if 'client_id' in case:
+                case['client_id'] = str(case['client_id'])
             if case.get('start_date'):
                 case['start_date'] = case['start_date'] if isinstance(case['start_date'], datetime) else datetime.strptime(case['start_date'], '%Y-%m-%d')
             if case.get('end_date'):
@@ -68,10 +75,17 @@ class Case:
     @staticmethod
     def get_by_id(case_id):
         db = get_db()
-        case = db.cases.find_one({'_id': ObjectId(case_id)})
+        try:
+            # First try with ObjectId
+            case = db.cases.find_one({'_id': ObjectId(case_id)})
+        except:
+            # If that fails, try with the string ID directly
+            case = db.cases.find_one({'_id': case_id})
+            
         if case:
             case['_id'] = str(case['_id'])
-            case['client_id'] = str(case['client_id'])
+            if 'client_id' in case:
+                case['client_id'] = str(case['client_id'])
             if case.get('start_date'):
                 case['start_date'] = case['start_date'] if isinstance(case['start_date'], datetime) else datetime.strptime(case['start_date'], '%Y-%m-%d')
             if case.get('end_date'):

@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Document Creation Dashboard</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Legal Templates Section -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <h4>Legal Templates</h4>
+                            {% if debug %}
+                            <div class="alert alert-info">
+                                <p>Number of legal templates: {{ legal_templates|length }}</p>
+                                <p>Legal templates data: {{ legal_templates|tojson(indent=2) }}</p>
+                            </div>
+                            {% endif %}
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Template Name</th>
+                                            <th>Type</th>
+                                            <th>Last Updated</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% if legal_templates %}
+                                            {% for template in legal_templates %}
+                                            <tr>
+                                                <td>{{ template.document_name }}</td>
+                                                <td>{{ template.doc_type }}</td>
+                                                <td>{{ template.timestamp }}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-info view-template" data-content="{{ template.content }}">View</button>
+                                                    <button class="btn btn-sm btn-primary use-template" data-content="{{ template.content }}">Use Template</button>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        {% else %}
+                                            <tr>
+                                                <td colspan="4" class="text-center">No legal templates found</td>
+                                            </tr>
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Document Upload Form -->
+                    <form id="uploadForm" enctype="multipart/form-data">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="case">Select Case</label>
+                                    <select class="form-control" id="case" name="case_id" required>
+                                        <option value="">Select a case</option>
+                                        {% for case in cases %}
+                                        <option value="{{ case.id }}">{{ case.title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="docType">Document Type</label>
+                                    <select class="form-control" id="docType" name="doc_type" required>
+                                        <option value="">Select document type</option>
+                                        {% if document_types %}
+                                            {% for doc_type in document_types %}
+                                            <option value="{{ doc_type }}">{{ doc_type }}</option>
+                                            {% endfor %}
+                                        {% else %}
+                                            <option value="Legal templates">Legal templates</option>
+                                            <option value="Legal cases">Legal cases</option>
+                                            <option value="General">General</option>
+                                            <option value="Texas Constitution and Statutes">Texas Constitution and Statutes</option>
+                                            <option value="FAQ">FAQ</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="file">Upload Document</label>
+                                    <input type="file" class="form-control-file" id="file" name="file" required>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Upload Document</button>
+                    </form>
+
+                    <!-- Debug Information -->
+                    {% if debug %}
+                    <div class="col-12 mt-3">
+                        <div class="alert alert-info">
+                            <h5>Debug Information:</h5>
+                            <p>Document Types: {{ document_types|tojson }}</p>
+                            <p>Legal Templates: {{ legal_templates|tojson }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <hr>
+
+                    <!-- AI Document Generation Form -->
+                    <form id="generateForm">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label for="genCase">Select Case</label>
+                                    <select class="form-control" id="genCase" name="case_id" required>
+                                        <option value="">Select a case</option>
+                                        {% for case in cases %}
+                                        <option value="{{ case.id }}">{{ case.title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label for="genDocType">Document Type</label>
+                                    <select class="form-control" id="genDocType" name="doc_type" required>
+                                        <option value="">Select document type</option>
+                                        {% for doc_type in document_types %}
+                                        <option value="{{ doc_type }}">{{ doc_type }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label for="title">Document Title</label>
+                                    <input type="text" class="form-control" id="title" name="title" required>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label for="requirements">Requirements</label>
+                                    <textarea class="form-control" id="requirements" name="requirements" rows="1" required></textarea>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success">Generate Document</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document List -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Documents</h3>
+                </div>
+                <div class="card-body">
+                    <table id="documentsTable" class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Type</th>
+                                <th>Case</th>
+                                <th>Uploaded By</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Documents will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Document Modal -->
+<div class="modal fade" id="viewDocumentModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">View Document</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="documentContent"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Template Modal -->
+<div class="modal fade" id="viewTemplateModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">View Template</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="templateContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="useTemplateBtn">Use This Template</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Initialize DataTable
+    var table = $('#documentsTable').DataTable({
+        order: [[4, 'desc']],
+        pageLength: 10
+    });
+
+    // Handle document upload
+    $('#uploadForm').on('submit', function(e) {
+        e.preventDefault();
+        var formData = new FormData(this);
+        
+        $.ajax({
+            url: '/document/create',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    toastr.success('Document uploaded successfully');
+                    loadDocuments();
+                    $('#uploadForm')[0].reset();
+                } else {
+                    toastr.error(response.message);
+                }
+            },
+            error: function() {
+                toastr.error('Failed to upload document');
+            }
+        });
+    });
+
+    // Handle document generation
+    $('#generateForm').on('submit', function(e) {
+        e.preventDefault();
+        var data = {
+            title: $('#title').val(),
+            requirements: $('#requirements').val(),
+            doc_type: $('#genDocType').val(),
+            case_id: $('#genCase').val()
+        };
+        
+        $.ajax({
+            url: '/document/generate',
+            type: 'POST',
+            data: JSON.stringify(data),
+            contentType: 'application/json',
+            success: function(response) {
+                if (response.success) {
+                    toastr.success('Document generated successfully');
+                    loadDocuments();
+                    $('#generateForm')[0].reset();
+                } else {
+                    toastr.error(response.message);
+                }
+            },
+            error: function() {
+                toastr.error('Failed to generate document');
+            }
+        });
+    });
+
+    // Load documents
+    function loadDocuments() {
+        $.get('/document/search', function(response) {
+            if (response.success) {
+                table.clear();
+                response.results.forEach(function(doc) {
+                    table.row.add([
+                        doc.filename,
+                        doc.doc_type,
+                        doc.case_title || 'N/A',
+                        doc.uploaded_by_name || 'N/A',
+                        new Date(doc.uploaded_at).toLocaleString(),
+                        `<button class="btn btn-sm btn-info view-document" data-id="${doc.id}">View</button>
+                         <button class="btn btn-sm btn-danger delete-document" data-id="${doc.id}">Delete</button>`
+                    ]);
+                });
+                table.draw();
+            }
+        });
+    }
+
+    // View document
+    $(document).on('click', '.view-document', function() {
+        var docId = $(this).data('id');
+        $.get(`/document/${docId}`, function(response) {
+            if (response.success) {
+                $('#documentContent').html(response.document.content);
+                $('#viewDocumentModal').modal('show');
+            } else {
+                toastr.error(response.message);
+            }
+        });
+    });
+
+    // View template
+    $(document).on('click', '.view-template', function() {
+        var content = $(this).data('content');
+        $('#templateContent').html(content);
+        $('#viewTemplateModal').modal('show');
+    });
+
+    // Use template
+    $(document).on('click', '.use-template', function() {
+        var content = $(this).data('content');
+        $('#requirements').val(content);
+        toastr.success('Template loaded into requirements field');
+    });
+
+    // Use template from modal
+    $('#useTemplateBtn').on('click', function() {
+        var content = $('#templateContent').html();
+        $('#requirements').val(content);
+        $('#viewTemplateModal').modal('hide');
+        toastr.success('Template loaded into requirements field');
+    });
+
+    // Delete document
+    $(document).on('click', '.delete-document', function() {
+        var docId = $(this).data('id');
+        if (confirm('Are you sure you want to delete this document?')) {
+            $.ajax({
+                url: `/document/${docId}`,
+                type: 'DELETE',
+                success: function(response) {
+                    if (response.success) {
+                        toastr.success('Document deleted successfully');
+                        loadDocuments();
+                    } else {
+                        toastr.error(response.message);
+                    }
+                },
+                error: function() {
+                    toastr.error('Failed to delete document');
+                }
+            });
+        }
+    });
+
+    // Initial load
+    loadDocuments();
+});
+</script>
+{% endblock %} 

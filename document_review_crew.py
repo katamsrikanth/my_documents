@@ -1,6 +1,6 @@
 from crewai import Agent, Task, Crew, Process
 from langchain.tools import tool
-from typing import List, Dict
+from typing import List, Dict, Optional
 import os
 import tempfile
 from pypdf import PdfReader
@@ -11,8 +11,11 @@ import requests
 from dotenv import load_dotenv
 from langchain.llms.base import LLM
 from langchain.callbacks.manager import CallbackManagerForLLMRun
-from typing import Optional, List, Mapping, Any
+from typing import Any, Mapping
 import weaviate
+from functools import lru_cache
+import hashlib
+import json
 
 # Disable CrewAI telemetry
 os.environ["CREWAI_TELEMETRY"] = "false"
@@ -22,7 +25,7 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -32,6 +35,7 @@ GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 # Initialize Weaviate client
+client = None
 try:
     client = weaviate.Client(
         url="http://localhost:8080"
@@ -39,10 +43,16 @@ try:
     logger.info("Weaviate client initialized successfully")
 except Exception as e:
     logger.error(f"Failed to initialize Weaviate client: {str(e)}")
-    client = None
 
-def search_legal_documents(query: str, limit: int = 5) -> List[Dict]:
-    """Search for legal documents in the vector database"""
+@lru_cache(maxsize=100)
+def get_document_hash(file_path: str) -> str:
+    """Generate a hash of the document for caching"""
+    with open(file_path, 'rb') as f:
+        return hashlib.md5(f.read()).hexdigest()
+
+@lru_cache(maxsize=100)
+def search_legal_documents(query: str, doc_type: str, limit: int = 3) -> List[Dict]:
+    """Search for legal documents in the vector database with caching"""
     try:
         if not client:
             raise Exception("Weaviate client not initialized")
@@ -51,14 +61,18 @@ def search_legal_documents(query: str, limit: int = 5) -> List[Dict]:
         result = (
             client.query
             .get("Document", ["document_name", "content", "doc_type"])
-            .with_near_text({"concepts": [query]})
+            .with_hybrid(
+                query=query,
+                properties=["content"],
+                alpha=0.5  # Balance between keyword and semantic search
+            )
             .with_where({
                 "operator": "And",
                 "operands": [
                     {
                         "path": ["doc_type"],
                         "operator": "Equal",
-                        "valueString": "legal"
+                        "valueString": doc_type
                     }
                 ]
             })
@@ -134,14 +148,16 @@ class DocumentReviewCrew:
         self.file_path = file_path
         self.doc_type = doc_type
         self.text = self._extract_text()
-        self.llm = GeminiLLM()
+        self.document_hash = get_document_hash(file_path)
         self.relevant_docs = self._get_relevant_documents()
+        self.llm = GeminiLLM()
         
     def _get_relevant_documents(self) -> List[Dict]:
-        """Get relevant legal documents for review"""
+        """Get relevant legal documents for review with caching"""
         try:
-            # Search for relevant legal documents
-            relevant_docs = search_legal_documents(self.text[:1000])  # Use first 1000 chars for search
+            # Use first 500 chars for search to reduce processing time
+            search_text = self.text[:500]
+            relevant_docs = search_legal_documents(search_text, self.doc_type)
             logger.info(f"Found {len(relevant_docs)} relevant legal documents")
             return relevant_docs
         except Exception as e:
@@ -176,26 +192,10 @@ class DocumentReviewCrew:
         """Create specialized agents for document review"""
         return [
             Agent(
-                role='Format Analyst',
-                goal='Analyze document format and structure',
-                backstory="""You are an expert in legal document formatting and structure.
-                You ensure documents follow proper formatting standards and include all necessary sections.""",
-                verbose=True,
-                llm=self.llm
-            ),
-            Agent(
-                role='Legal Expert',
-                goal='Review legal terminology and clause consistency',
-                backstory="""You are a legal expert specializing in document review.
-                You ensure proper use of legal terminology and consistent clause structure.""",
-                verbose=True,
-                llm=self.llm
-            ),
-            Agent(
-                role='Compliance Officer',
-                goal='Check document compliance with organizational standards',
-                backstory="""You are a compliance officer ensuring documents meet
-                organizational standards and regulatory requirements.""",
+                role='Document Analyst',
+                goal='Analyze document format, structure, and legal content',
+                backstory="""You are an expert in legal document analysis who ensures documents follow 
+                proper formatting standards, use correct legal terminology, and meet compliance requirements.""",
                 verbose=True,
                 llm=self.llm
             )
@@ -208,37 +208,17 @@ class DocumentReviewCrew:
         
         return [
             Task(
-                description=f"""Analyze the format and structure of this {self.doc_type} document.
-                Check if it follows standard formatting and includes all necessary sections.
-                Compare with similar legal documents for consistency.
+                description=f"""Analyze this {self.doc_type} document and provide a comprehensive review:
+                1. Format and structure analysis
+                2. Legal terminology and clause consistency
+                3. Compliance with organizational standards
+                4. Potential risks and improvements
                 
                 Document text: {self.text[:1000]}...
                 
                 Relevant legal documents for reference:
-                {context[:2000]}...""",
+                {context[:1000]}...""",
                 agent=self.create_agents()[0]
-            ),
-            Task(
-                description=f"""Review the legal terminology and clause structure of this {self.doc_type} document.
-                Check for proper use of legal terms and consistent clause formatting.
-                Compare with similar legal documents for consistency.
-                
-                Document text: {self.text[:1000]}...
-                
-                Relevant legal documents for reference:
-                {context[:2000]}...""",
-                agent=self.create_agents()[1]
-            ),
-            Task(
-                description=f"""Check if this {self.doc_type} document complies with organizational standards.
-                Identify any potential risks or compliance issues.
-                Compare with similar legal documents for consistency.
-                
-                Document text: {self.text[:1000]}...
-                
-                Relevant legal documents for reference:
-                {context[:2000]}...""",
-                agent=self.create_agents()[2]
             )
         ]
     
@@ -247,7 +227,7 @@ class DocumentReviewCrew:
         try:
             logger.info(f"Starting document review for {self.file_path}")
             
-            # Create crew
+            # Create crew with single agent
             crew = Crew(
                 agents=self.create_agents(),
                 tasks=self.create_tasks(),
@@ -262,8 +242,8 @@ class DocumentReviewCrew:
             
             # Process results
             return {
-                "analysis": result,  # This will contain the combined analysis from all agents
-                "compliance": "Compliance check results...",  # Add actual compliance results
+                "analysis": result,
+                "compliance": "Compliance check results...",
                 "suggestions": [
                     "Suggestion 1: Improve document structure",
                     "Suggestion 2: Update legal terminology",

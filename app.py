@@ -32,6 +32,7 @@ from models.case import Case
 from models.appointment import Appointment
 from models.initial_inquiry import InitialInquiry
 from models.attorney import Attorney
+from bson import ObjectId  # Add this import at the top if not present
 
 # Load environment variables
 load_dotenv()
@@ -733,6 +734,9 @@ def perform_search(query, document_name=None):
         query = clean_text(query)
         try:
             logger.debug(f"Querying Document with query: '{query}', document_name: '{document_name}'")
+            if not document_name:
+                logger.error("No document_name provided for search with .with_where. Please select a document.")
+                return []
             
             # Create the query builder
             query_builder = client.query.get("Document", ["document_name", "chunk_index", "content", "doc_type"])
@@ -2758,50 +2762,90 @@ def cases():
     
     # Get client names for each case
     for case in cases:
-        client = Client.get_by_id(case['client_id'])
-        case['client_name'] = f"{client['first_name']} {client['last_name']}" if client else 'Unknown Client'
+        try:
+            client = Client.get_by_id(case['client_id'])
+            case['client_name'] = f"{client['first_name']} {client['last_name']}" if client else 'Unknown Client'
+        except Exception as e:
+            logger.error(f"Error fetching client for case: {str(e)}")
+            case['client_name'] = 'Unknown Client'
     
     clients = Client.get_all()  # For the add case form
     return render_template('cases.html', cases=cases, clients=clients)
 
 @app.route('/cases/add', methods=['GET', 'POST'])
 @login_required
-def add_case_page():  # Changed from add_case to add_case_page
+def add_case_page():
     if request.method == 'GET':
         clients = Client.get_all()
-        # Get client_id from query parameters if it exists
         selected_client_id = request.args.get('client_id')
         return render_template('add_case.html', clients=clients, selected_client_id=selected_client_id)
     
     try:
+        # Log the incoming request data
+        print("Request form data:", request.form)
+        print("Request files:", request.files)
+        
+        # Get form data
         case_data = {
-            'client_id': request.form['client_id'],
-            'title': request.form['title'],
-            'description': request.form['description'],
-            'case_type': request.form['case_type'],
-            'court_name': request.form['court_name'],
-            'case_number': request.form['case_number'],
-            'status': request.form['status'],
-            'start_date': request.form['start_date'],
-            'end_date': request.form['end_date'] if request.form['end_date'] else None,
+            'client_id': request.form.get('client_id'),
+            'title': request.form.get('title', ''),
+            'description': request.form.get('description', ''),
+            'case_type': request.form.get('case_type'),
+            'court_name': request.form.get('court_name', ''),
+            'case_number': request.form.get('case_number'),
+            'status': request.form.get('status'),
+            'start_date': request.form.get('start_date'),
+            'end_date': request.form.get('end_date') if request.form.get('end_date') else None,
+            'priority': request.form.get('priority'),
             'assigned_attorney_id': session.get('user_id')
         }
         
+        # Validate required fields
+        required_fields = ['client_id', 'case_type', 'case_number', 'status', 'start_date']
+        missing_fields = [field for field in required_fields if not case_data.get(field)]
+        if missing_fields:
+            flash(f'Missing required fields: {", ".join(missing_fields)}', 'error')
+            return redirect(url_for('add_case_page'))
+        
+        # Create and save case
         case = Case(**case_data)
         case.save()
+        
         flash('Case added successfully!', 'success')
-        return redirect(url_for('cases'))
+        return redirect(url_for('clients'))
     except Exception as e:
+        print("Error adding case:", str(e))
         flash(f'Error adding case: {str(e)}', 'error')
-        return redirect(url_for('add_case_page'))  # Updated redirect to use new function name
+        return redirect(url_for('add_case_page'))
 
 @app.route('/case/<case_id>')
 @login_required
 def get_case(case_id):
-    case = Case.get_by_id(case_id)
-    if case:
+    try:
+        case = Case.get_by_id(case_id)
+        if not case:
+            return jsonify({'error': 'Case not found'}), 404
+            
+        # Get client information
+        client = Client.get_by_id(case['client_id'])
+        case['client_name'] = f"{client['first_name']} {client['last_name']}" if client else 'Unknown Client'
+        
+        # Format dates
+        if 'start_date' in case:
+            case['start_date'] = case['start_date'].strftime('%Y-%m-%d') if case['start_date'] else None
+        if 'end_date' in case:
+            case['end_date'] = case['end_date'].strftime('%Y-%m-%d') if case['end_date'] else None
+            
+        # Convert ObjectId to string for JSON serialization
+        if '_id' in case and isinstance(case['_id'], ObjectId):
+            case['_id'] = str(case['_id'])
+        if 'client_id' in case and isinstance(case['client_id'], ObjectId):
+            case['client_id'] = str(case['client_id'])
+            
         return jsonify(case)
-    return jsonify({'error': 'Case not found'}), 404
+    except Exception as e:
+        logger.error(f"Error fetching case: {str(e)}")
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/case/<case_id>', methods=['PUT'])
 @login_required
@@ -2842,19 +2886,28 @@ def get_client_cases(client_id):
 @app.route('/appointments')
 @login_required
 def appointments():
-    search_query = request.args.get('search', '')
-    if search_query:
-        appointments = Appointment.search(search_query)
-    else:
-        appointments = Appointment.get_all()
-    
-    # Get case titles for each appointment
-    for appointment in appointments:
-        case = Case.get_by_id(appointment['case_id'])
-        appointment['case_title'] = case['title'] if case else 'Unknown Case'
-    
-    cases = Case.get_all()  # For the add appointment form
-    return render_template('appointments.html', appointments=appointments, cases=cases)
+    try:
+        search_query = request.args.get('search', '')
+        if search_query:
+            appointments = Appointment.search(search_query)
+        else:
+            appointments = Appointment.get_all()
+        
+        # Get case titles for each appointment
+        for appointment in appointments:
+            try:
+                case = Case.get_by_id(appointment['case_id'])
+                appointment['case_title'] = case['title'] if case else 'Unknown Case'
+            except Exception as e:
+                logger.error(f"Error fetching case for appointment: {str(e)}")
+                appointment['case_title'] = 'Unknown Case'
+        
+        cases = Case.get_all()  # For the add appointment form
+        return render_template('appointments.html', appointments=appointments, cases=cases)
+    except Exception as e:
+        logger.error(f"Error in appointments route: {str(e)}")
+        flash('Error loading appointments', 'error')
+        return render_template('appointments.html', appointments=[], cases=[])
 
 @app.route('/appointment', methods=['POST'])
 @login_required
@@ -2896,13 +2949,33 @@ def create_appointment():
 @login_required
 def get_appointment(appointment_id):
     try:
+        print(f"Fetching appointment with ID: {appointment_id}")  # Debug log
         appointment = Appointment.get_by_id(appointment_id)
-        if appointment:
+        
+        if not appointment:
+            print(f"Appointment not found: {appointment_id}")  # Debug log
+            return jsonify({'error': 'Appointment not found'}), 404
+            
+        print(f"Found appointment: {appointment}")  # Debug log
+        
+        # Get case information
+        if appointment.get('case_id'):
             case = Case.get_by_id(appointment['case_id'])
-            appointment['case_title'] = case['title'] if case else 'Unknown Case'
-            return jsonify(appointment)
-        return jsonify({'error': 'Appointment not found'}), 404
+            appointment['case_title'] = case['title'] if case else 'Unknown Case'  # Changed from 'description' to 'title'
+        else:
+            appointment['case_title'] = 'No Case Assigned'
+            
+        # Format date_time for JSON serialization
+        if appointment.get('date_time'):
+            appointment['date_time'] = appointment['date_time'].isoformat()
+        
+        # Convert ObjectId to string for JSON serialization
+        if '_id' in appointment and isinstance(appointment['_id'], ObjectId):
+            appointment['_id'] = str(appointment['_id'])
+            
+        return jsonify(appointment)
     except Exception as e:
+        print(f"Error fetching appointment: {str(e)}")  # Debug log
         return jsonify({'error': str(e)}), 400
 
 @app.route('/appointment/<appointment_id>', methods=['PUT'])
@@ -3024,6 +3097,66 @@ def edit_client_page(client_id):
         return render_template('edit_client.html', client=client)
     flash('Client not found', 'error')
     return redirect(url_for('clients'))
+
+@app.route('/case/<case_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_case(case_id):
+    case = Case.get_by_id(case_id)
+    if not case:
+        flash('Case not found', 'error')
+        return redirect(url_for('cases'))
+    
+    if request.method == 'POST':
+        try:
+            update_data = {
+                'client_id': request.form['client_id'],
+                'title': request.form['title'],
+                'description': request.form['description'],
+                'case_type': request.form['case_type'],
+                'court_name': request.form['court_name'],
+                'case_number': request.form['case_number'],
+                'status': request.form['status'],
+                'start_date': request.form['start_date'],
+                'end_date': request.form['end_date'] if request.form['end_date'] else None
+            }
+            
+            Case.update(case_id, update_data)
+            flash('Case updated successfully!', 'success')
+            return redirect(url_for('cases'))
+        except Exception as e:
+            flash(f'Error updating case: {str(e)}', 'error')
+            return redirect(url_for('edit_case', case_id=case_id))
+    
+    clients = Client.get_all()
+    return render_template('edit_case.html', case=case, clients=clients)
+
+@app.route('/appointment/<appointment_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_appointment(appointment_id):
+    appointment = Appointment.get_by_id(appointment_id)
+    if not appointment:
+        flash('Appointment not found', 'error')
+        return redirect(url_for('appointments'))
+    
+    if request.method == 'POST':
+        try:
+            update_data = {
+                'case_id': request.form['case_id'],
+                'date_time': datetime.strptime(request.form['date_time'], '%Y-%m-%dT%H:%M'),
+                'location': request.form['location'],
+                'purpose': request.form['purpose'],
+                'status': request.form['status']
+            }
+            
+            Appointment.update(appointment_id, update_data)
+            flash('Appointment updated successfully!', 'success')
+            return redirect(url_for('appointments'))
+        except Exception as e:
+            flash(f'Error updating appointment: {str(e)}', 'error')
+            return redirect(url_for('edit_appointment', appointment_id=appointment_id))
+    
+    cases = Case.get_all()
+    return render_template('edit_appointment.html', appointment=appointment, cases=cases)
 
 if __name__ == '__main__':
     try:

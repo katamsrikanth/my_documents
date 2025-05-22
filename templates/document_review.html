@@ -84,28 +84,60 @@
             }
             
             let html = `
-                <div class="card">
+                <div class="card review-card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Document Review Results</h5>
+                    </div>
                     <div class="card-body">
-                        <h5 class="card-title">Review Results</h5>
                         <div class="review-section">
-                            <h6>Document Analysis</h6>
-                            <p>${data.analysis}</p>
+                            <h6 class="section-title">
+                                <i class="fas fa-file-alt me-2"></i>Document Analysis
+                            </h6>
+                            <div class="analysis-content">
+                                ${formatAnalysis(data.analysis)}
+                            </div>
                         </div>
+                        
                         <div class="review-section">
-                            <h6>Compliance Check</h6>
-                            <p>${data.compliance}</p>
+                            <h6 class="section-title">
+                                <i class="fas fa-check-circle me-2"></i>Compliance Check
+                            </h6>
+                            <div class="compliance-content">
+                                ${data.compliance}
+                            </div>
                         </div>
+                        
                         <div class="review-section">
-                            <h6>Suggestions</h6>
-                            <ul class="list-group">
+                            <h6 class="section-title">
+                                <i class="fas fa-lightbulb me-2"></i>Suggestions
+                            </h6>
+                            <ul class="suggestions-list">
                                 ${data.suggestions.map(suggestion => `
-                                    <li class="list-group-item">${suggestion}</li>
+                                    <li class="suggestion-item">
+                                        <i class="fas fa-arrow-right me-2"></i>${suggestion}
+                                    </li>
                                 `).join('')}
                             </ul>
                         </div>
+                        
                         <div class="review-section">
-                            <h6>Recommendations</h6>
-                            <p>${data.recommendations}</p>
+                            <h6 class="section-title">
+                                <i class="fas fa-star me-2"></i>Recommendations
+                            </h6>
+                            <div class="recommendations-content">
+                                ${data.recommendations}
+                            </div>
+                        </div>
+                        
+                        <div class="review-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-book me-2"></i>Reference Documents
+                            </h6>
+                            <div class="reference-documents">
+                                ${data.reference_documents.map(doc => `
+                                    <span class="badge bg-info me-2 mb-2">${doc}</span>
+                                `).join('')}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -122,22 +154,84 @@
             spinner.classList.add('d-none');
         });
     });
+
+    function formatAnalysis(analysis) {
+        // Convert markdown-style formatting to HTML
+        return analysis
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/\n\*\s(.*?)(?=\n|$)/g, '<li>$1</li>')
+            .replace(/\n\d+\.\s(.*?)(?=\n|$)/g, '<li>$1</li>')
+            .replace(/\n\n/g, '<br><br>');
+    }
 </script>
 
 <style>
+    .review-card {
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border: none;
+        margin-bottom: 2rem;
+    }
+
     .review-section {
-        margin-bottom: 1.5rem;
-        padding: 1rem;
+        margin-bottom: 2rem;
+        padding: 1.5rem;
         background-color: #f8f9fa;
-        border-radius: 5px;
+        border-radius: 8px;
+        border-left: 4px solid #0d6efd;
     }
-    .review-section h6 {
+
+    .section-title {
         color: #0d6efd;
-        margin-bottom: 0.5rem;
+        margin-bottom: 1rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
     }
-    .list-group-item {
-        border-left: 4px solid #28a745;
-        margin-bottom: 0.5rem;
+
+    .analysis-content {
+        line-height: 1.6;
+    }
+
+    .suggestions-list {
+        list-style: none;
+        padding-left: 0;
+    }
+
+    .suggestion-item {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .suggestion-item:last-child {
+        border-bottom: none;
+    }
+
+    .recommendations-content {
+        line-height: 1.6;
+    }
+
+    .reference-documents {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .badge {
+        font-size: 0.9rem;
+        padding: 0.5rem 1rem;
+    }
+
+    .card-header {
+        border-bottom: none;
+    }
+
+    .card-title {
+        margin-bottom: 0;
+    }
+
+    .compliance-content {
+        line-height: 1.6;
     }
 </style>
 {% endblock %} 

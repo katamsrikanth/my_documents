@@ -123,7 +123,28 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="country" class="form-label">Country</label>
-                        <input type="text" class="form-control" id="country" name="country" value="{{ client.country or '' }}">
+                        <select class="form-select" id="country" name="country">
+                            <option value="">Select Country</option>
+                            <option value="US" {% if client.country == 'US' %}selected{% endif %}>United States</option>
+                            <option value="CA" {% if client.country == 'CA' %}selected{% endif %}>Canada</option>
+                            <option value="GB" {% if client.country == 'GB' %}selected{% endif %}>United Kingdom</option>
+                            <option value="AU" {% if client.country == 'AU' %}selected{% endif %}>Australia</option>
+                            <option value="IN" {% if client.country == 'IN' %}selected{% endif %}>India</option>
+                            <option value="CN" {% if client.country == 'CN' %}selected{% endif %}>China</option>
+                            <option value="JP" {% if client.country == 'JP' %}selected{% endif %}>Japan</option>
+                            <option value="DE" {% if client.country == 'DE' %}selected{% endif %}>Germany</option>
+                            <option value="FR" {% if client.country == 'FR' %}selected{% endif %}>France</option>
+                            <option value="IT" {% if client.country == 'IT' %}selected{% endif %}>Italy</option>
+                            <option value="ES" {% if client.country == 'ES' %}selected{% endif %}>Spain</option>
+                            <option value="BR" {% if client.country == 'BR' %}selected{% endif %}>Brazil</option>
+                            <option value="MX" {% if client.country == 'MX' %}selected{% endif %}>Mexico</option>
+                            <option value="RU" {% if client.country == 'RU' %}selected{% endif %}>Russia</option>
+                            <option value="ZA" {% if client.country == 'ZA' %}selected{% endif %}>South Africa</option>
+                            <option value="AE" {% if client.country == 'AE' %}selected{% endif %}>United Arab Emirates</option>
+                            <option value="SG" {% if client.country == 'SG' %}selected{% endif %}>Singapore</option>
+                            <option value="KR" {% if client.country == 'KR' %}selected{% endif %}>South Korea</option>
+                            <option value="NZ" {% if client.country == 'NZ' %}selected{% endif %}>New Zealand</option>
+                        </select>
                     </div>
                     <div class="col-md-6 mb-3">
                         <label for="preferred_contact" class="form-label">Preferred Contact Method</label>
