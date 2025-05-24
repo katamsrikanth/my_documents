@@ -6,6 +6,7 @@ from models.database import get_db
 import os
 import shutil
 from werkzeug.utils import secure_filename
+import json
 
 class Case:
     def __init__(self, **kwargs):
@@ -156,88 +157,88 @@ class Case:
         return cases
 
     @staticmethod
-    def add_document(case_id, file, description=''):
-        """Add a document to a case with version control"""
-        case = Case.get_by_id(case_id)
-        if not case:
-            raise Exception("Case not found")
+    def get_document_storage_path():
+        base_path = os.getenv('DOCUMENT_STORAGE_PATH', 'documents')
+        if not os.path.exists(base_path):
+            os.makedirs(base_path)
+        return base_path
 
-        # Create case-specific directory if it doesn't exist
-        case_dir = os.path.join('/Users/srikanthkatam/Documents/srikanth/Apps/legal_storage/case_documents', str(case_id))
-        os.makedirs(case_dir, exist_ok=True)
+    def get_case_document_path(self):
+        case_path = os.path.join(self.get_document_storage_path(), str(self._id))
+        if not os.path.exists(case_path):
+            os.makedirs(case_path)
+        return case_path
 
-        # Secure the filename and add version number
-        original_filename = secure_filename(file.filename)
-        base_name, ext = os.path.splitext(original_filename)
+    def add_document(self, file, description=''):
+        if not self._id:
+            raise ValueError("Case must be saved before adding documents")
+
+        filename = secure_filename(file.filename)
+        case_path = self.get_case_document_path()
         
-        # Get existing versions of this document
-        existing_versions = [doc for doc in case.get('documents', []) 
-                           if doc['original_name'] == original_filename]
-        version = len(existing_versions) + 1
+        # Get the latest version number for this document
+        existing_versions = [doc['version'] for doc in self.documents if doc['filename'] == filename]
+        version = max(existing_versions) + 1 if existing_versions else 1
         
-        # Create new filename with version
-        new_filename = f"{base_name}_v{version}{ext}"
-        file_path = os.path.join(case_dir, new_filename)
+        # Create version directory
+        version_dir = os.path.join(case_path, f"v{version}")
+        if not os.path.exists(version_dir):
+            os.makedirs(version_dir)
         
         # Save the file
+        file_path = os.path.join(version_dir, filename)
         file.save(file_path)
         
-        # Add document metadata
+        # Create document metadata
         document = {
-            'filename': new_filename,
-            'original_name': original_filename,
-            'description': description,
+            '_id': str(ObjectId()),
+            'filename': filename,
+            'original_filename': file.filename,
             'version': version,
-            'uploaded_at': datetime.now().isoformat(),
-            'file_size': os.path.getsize(file_path)
+            'description': description,
+            'uploaded_at': datetime.now(),
+            'file_path': file_path,
+            'file_size': os.path.getsize(file_path),
+            'mime_type': file.content_type
         }
         
-        # Update case with new document
-        collection = Case.get_collection()
-        collection.update_one(
-            {'_id': ObjectId(case_id)},
-            {
-                '$push': {'documents': document},
-                '$set': {'updated_at': datetime.now()}
-            }
+        # Add to documents list
+        self.documents.append(document)
+        
+        # Update in database
+        db = get_db()
+        db.cases.update_one(
+            {'_id': ObjectId(self._id)},
+            {'$push': {'documents': document}}
         )
         
         return document
 
-    @staticmethod
-    def delete_document(case_id, filename):
-        """Delete a document from a case"""
-        case = Case.get_by_id(case_id)
-        if not case:
-            raise Exception("Case not found")
-
-        # Find the document in the case
-        document = None
-        for doc in case.get('documents', []):
-            if doc['filename'] == filename:
-                document = doc
-                break
-
+    def delete_document(self, document_id):
+        if not self._id:
+            raise ValueError("Case must be saved before deleting documents")
+        
+        # Find the document
+        document = next((doc for doc in self.documents if doc['_id'] == document_id), None)
         if not document:
-            raise Exception("Document not found")
-
+            raise ValueError("Document not found")
+        
         # Delete the file
-        file_path = os.path.join('/Users/srikanthkatam/Documents/srikanth/Apps/legal_storage/case_documents', 
-                                str(case_id), filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-        # Update case to remove document
-        collection = Case.get_collection()
-        collection.update_one(
-            {'_id': ObjectId(case_id)},
-            {
-                '$pull': {'documents': {'filename': filename}},
-                '$set': {'updated_at': datetime.now()}
-            }
+        if os.path.exists(document['file_path']):
+            os.remove(document['file_path'])
+        
+        # Remove from documents list
+        self.documents = [doc for doc in self.documents if doc['_id'] != document_id]
+        
+        # Update in database
+        db = get_db()
+        db.cases.update_one(
+            {'_id': ObjectId(self._id)},
+            {'$pull': {'documents': {'_id': document_id}}}
         )
 
-        return True
+    def get_document(self, document_id):
+        return next((doc for doc in self.documents if doc['_id'] == document_id), None)
 
     @staticmethod
     def get_document_path(case_id, filename):

@@ -280,6 +280,7 @@ def generate_gemini_response(prompt):
             }]
         }
         
+        logger.info("Making request to Gemini API...")
         response = requests.post(
             GEMINI_API_URL,
             headers=headers,
@@ -293,6 +294,7 @@ def generate_gemini_response(prompt):
                 return result['candidates'][0]['content']['parts'][0]['text']
             else:
                 logger.error("No valid response from Gemini API")
+                logger.error(f"Response: {response.text}")
                 return None
         else:
             logger.error(f"Gemini API request failed with status {response.status_code}: {response.text}")
@@ -1603,9 +1605,9 @@ def generate_document():
         logging.error(f"Error in generate_document: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/download_document', methods=['POST'])
+@app.route('/download_generated_document', methods=['POST'])
 @login_required
-def download_document():
+def download_generated_document():
     """Generate and download the document as DOCX."""
     try:
         data = request.get_json()
@@ -2790,48 +2792,70 @@ def cases():
 @app.route('/cases/add', methods=['GET', 'POST'])
 @login_required
 def add_case_page():
-    if request.method == 'GET':
-        clients = Client.get_all()
-        selected_client_id = request.args.get('client_id')
-        return render_template('add_case.html', clients=clients, selected_client_id=selected_client_id)
+    logger.debug("Accessing add case page")
+    if request.method == 'POST':
+        logger.debug("Processing add case POST request")
+        try:
+            # Get form data
+            client_id = request.form.get('client_id')
+            title = request.form.get('title')
+            description = request.form.get('description')
+            case_type = request.form.get('case_type')
+            court_name = request.form.get('court_name')
+            case_number = request.form.get('case_number')
+            status = request.form.get('status')
+            start_date = request.form.get('start_date')
+            end_date = request.form.get('end_date')
+            priority = request.form.get('priority')
+            
+            logger.debug(f"Received case data - Title: {title}, Type: {case_type}, Status: {status}")
+            
+            # Create case document
+            case = {
+                'client_id': ObjectId(client_id),
+                'title': title,
+                'description': description,
+                'case_type': case_type,
+                'court_name': court_name,
+                'case_number': case_number,
+                'status': status,
+                'start_date': datetime.strptime(start_date, '%Y-%m-%d') if start_date else None,
+                'end_date': datetime.strptime(end_date, '%Y-%m-%d') if end_date else None,
+                'priority': priority,
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow()
+            }
+            
+            logger.debug("Inserting case into database")
+            # Insert case into MongoDB
+            result = cases_collection.insert_one(case)
+            case_id = result.inserted_id
+            logger.debug(f"Case created with ID: {case_id}")
+            
+            # Handle uploaded documents
+            uploaded_docs = request.form.get('uploaded_documents')
+            if uploaded_docs:
+                logger.debug("Processing uploaded documents")
+                try:
+                    doc_ids = json.loads(uploaded_docs)
+                    logger.debug(f"Found {len(doc_ids)} documents to associate with case")
+                    # Update documents with case_id
+                    for doc in doc_ids:
+                        documents_collection.update_one(
+                            {'_id': ObjectId(doc['id'])},
+                            {'$set': {'case_id': case_id}}
+                        )
+                    logger.debug("Documents successfully associated with case")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Error parsing uploaded documents JSON: {str(e)}")
+            
+            return jsonify({'success': True, 'case_id': str(case_id)})
+        except Exception as e:
+            logger.error(f"Error adding case: {str(e)}")
+            return jsonify({'error': str(e)}), 500
     
-    try:
-        # Log the incoming request data
-        print("Request form data:", request.form)
-        print("Request files:", request.files)
-        
-        # Get form data
-        case_data = {
-            'client_id': request.form.get('client_id'),
-            'title': request.form.get('title', ''),
-            'description': request.form.get('description', ''),
-            'case_type': request.form.get('case_type'),
-            'court_name': request.form.get('court_name', ''),
-            'case_number': request.form.get('case_number'),
-            'status': request.form.get('status'),
-            'start_date': request.form.get('start_date'),
-            'end_date': request.form.get('end_date') if request.form.get('end_date') else None,
-            'priority': request.form.get('priority'),
-            'assigned_attorney_id': session.get('user_id')
-        }
-        
-        # Validate required fields
-        required_fields = ['client_id', 'case_type', 'case_number', 'status', 'start_date']
-        missing_fields = [field for field in required_fields if not case_data.get(field)]
-        if missing_fields:
-            flash(f'Missing required fields: {", ".join(missing_fields)}', 'error')
-            return redirect(url_for('add_case_page'))
-        
-        # Create and save case
-        case = Case(**case_data)
-        case.save()
-        
-        flash('Case added successfully!', 'success')
-        return redirect(url_for('clients'))
-    except Exception as e:
-        print("Error adding case:", str(e))
-        flash(f'Error adding case: {str(e)}', 'error')
-        return redirect(url_for('add_case_page'))
+    logger.debug("Rendering add case form")
+    return render_template('add_case.html')
 
 @app.route('/case/<case_id>')
 @login_required
@@ -2865,16 +2889,47 @@ def get_case(case_id):
 @app.route('/case/<case_id>', methods=['PUT'])
 @login_required
 def update_case(case_id):
-    case = Case.get_by_id(case_id)
-    if not case:
-        return jsonify({'error': 'Case not found'}), 404
-    
+    logger.debug(f"Accessing edit case page for case ID: {case_id}")
     try:
-        update_data = request.get_json()
-        Case.update(case_id, update_data)
-        return jsonify({'message': 'Case updated successfully'})
+        case = Case.get_by_id(case_id)
+        if not case:
+            logger.error(f"Case not found with ID: {case_id}")
+            return jsonify({'error': 'Case not found'}), 404
+
+        if request.method == 'POST':
+            logger.debug(f"Processing edit case POST request for case ID: {case_id}")
+            try:
+                # Update case data
+                case.title = request.form.get('title')
+                case.description = request.form.get('description')
+                case.case_type = request.form.get('case_type')
+                case.court_name = request.form.get('court_name')
+                case.case_number = request.form.get('case_number')
+                case.status = request.form.get('status')
+                case.priority = request.form.get('priority')
+                
+                # Handle dates
+                start_date = request.form.get('start_date')
+                if start_date:
+                    case.start_date = datetime.strptime(start_date, '%Y-%m-%d')
+                end_date = request.form.get('end_date')
+                if end_date:
+                    case.end_date = datetime.strptime(end_date, '%Y-%m-%d')
+                
+                logger.debug(f"Updating case with new data - Title: {case.title}, Status: {case.status}")
+                case.save()
+                logger.debug("Case updated successfully")
+                
+                return jsonify({'success': True})
+            except Exception as e:
+                logger.error(f"Error updating case: {str(e)}")
+                return jsonify({'error': str(e)}), 500
+
+        logger.debug("Rendering edit case form")
+        return render_template('edit_case.html', case=case)
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        logger.error(f"Error in edit case route: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/case/<case_id>', methods=['DELETE'])
 @login_required
@@ -3116,34 +3171,47 @@ def edit_client_page(client_id):
 @app.route('/case/<case_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_case(case_id):
-    case = Case.get_by_id(case_id)
-    if not case:
-        flash('Case not found', 'error')
-        return redirect(url_for('cases'))
-    
-    if request.method == 'POST':
-        try:
-            update_data = {
-                'client_id': request.form['client_id'],
-                'title': request.form['title'],
-                'description': request.form['description'],
-                'case_type': request.form['case_type'],
-                'court_name': request.form['court_name'],
-                'case_number': request.form['case_number'],
-                'status': request.form['status'],
-                'start_date': request.form['start_date'],
-                'end_date': request.form['end_date'] if request.form['end_date'] else None
-            }
-            
-            Case.update(case_id, update_data)
-            flash('Case updated successfully!', 'success')
-            return redirect(url_for('cases'))
-        except Exception as e:
-            flash(f'Error updating case: {str(e)}', 'error')
-            return redirect(url_for('edit_case', case_id=case_id))
-    
-    clients = Client.get_all()
-    return render_template('edit_case.html', case=case, clients=clients)
+    logger.debug(f"Accessing edit case page for case ID: {case_id}")
+    try:
+        case = Case.get_by_id(case_id)
+        if not case:
+            logger.error(f"Case not found with ID: {case_id}")
+            return jsonify({'error': 'Case not found'}), 404
+
+        if request.method == 'POST':
+            logger.debug(f"Processing edit case POST request for case ID: {case_id}")
+            try:
+                # Update case data
+                case.title = request.form.get('title')
+                case.description = request.form.get('description')
+                case.case_type = request.form.get('case_type')
+                case.court_name = request.form.get('court_name')
+                case.case_number = request.form.get('case_number')
+                case.status = request.form.get('status')
+                case.priority = request.form.get('priority')
+                
+                # Handle dates
+                start_date = request.form.get('start_date')
+                if start_date:
+                    case.start_date = datetime.strptime(start_date, '%Y-%m-%d')
+                end_date = request.form.get('end_date')
+                if end_date:
+                    case.end_date = datetime.strptime(end_date, '%Y-%m-%d')
+                
+                logger.debug(f"Updating case with new data - Title: {case.title}, Status: {case.status}")
+                case.save()
+                logger.debug("Case updated successfully")
+                
+                return jsonify({'success': True})
+            except Exception as e:
+                logger.error(f"Error updating case: {str(e)}")
+                return jsonify({'error': str(e)}), 500
+
+        logger.debug("Rendering edit case form")
+        return render_template('edit_case.html', case=case)
+    except Exception as e:
+        logger.error(f"Error in edit case route: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/appointment/<appointment_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -3172,6 +3240,316 @@ def edit_appointment(appointment_id):
     
     cases = Case.get_all()
     return render_template('edit_appointment.html', appointment=appointment, cases=cases)
+
+@app.route('/case/<case_id>/documents', methods=['POST'])
+@login_required
+def upload_case_documents(case_id):
+    logger.debug(f"Processing document upload for case ID: {case_id}")
+    try:
+        # Get case data from database
+        case_data = Case.get_by_id(case_id)
+        if not case_data:
+            logger.error(f"Case not found with ID: {case_id}")
+            return jsonify({'error': 'Case not found'}), 404
+
+        # Create Case object from the data
+        case = Case(**case_data)
+        logger.debug("Case object created successfully")
+
+        if 'files' not in request.files:
+            logger.warning("No files provided in request")
+            return jsonify({'error': 'No files provided'}), 400
+
+        files = request.files.getlist('files')
+        description = request.form.get('description', '')
+        logger.debug(f"Received {len(files)} files for upload")
+
+        uploaded_documents = []
+        for file in files:
+            if file.filename:
+                logger.debug(f"Processing file: {file.filename}")
+                document = case.add_document(file, description)
+                uploaded_documents.append(document)
+                logger.debug(f"File {file.filename} uploaded successfully")
+
+        logger.debug(f"Successfully uploaded {len(uploaded_documents)} documents")
+        return jsonify({
+            'message': 'Documents uploaded successfully',
+            'documents': uploaded_documents
+        })
+
+    except Exception as e:
+        logger.error(f"Error uploading documents: {str(e)}")
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/case/<case_id>/documents/<document_id>', methods=['DELETE'])
+@login_required
+def delete_case_document(case_id, document_id):
+    logger.debug(f"Processing document deletion - Case ID: {case_id}, Document ID: {document_id}")
+    try:
+        case = Case.get_by_id(case_id)
+        if not case:
+            logger.error(f"Case not found with ID: {case_id}")
+            return jsonify({'error': 'Case not found'}), 404
+
+        logger.debug("Deleting document from case")
+        case.delete_document(document_id)
+        logger.debug("Document deleted successfully")
+        return jsonify({'message': 'Document deleted successfully'})
+
+    except Exception as e:
+        logger.error(f"Error deleting document: {str(e)}")
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/document/<document_id>/download')
+@login_required
+def download_document(document_id):
+    try:
+        # Find the case containing this document
+        db = get_db()
+        case = db.cases.find_one({'documents._id': document_id})
+        if not case:
+            return jsonify({'error': 'Document not found'}), 404
+
+        # Find the document
+        document = next((doc for doc in case['documents'] if doc['_id'] == document_id), None)
+        if not document:
+            return jsonify({'error': 'Document not found'}), 404
+
+        # Check if file exists
+        if not os.path.exists(document['file_path']):
+            return jsonify({'error': 'File not found'}), 404
+
+        return send_file(
+            document['file_path'],
+            as_attachment=True,
+            download_name=document['original_filename'],
+            mimetype=document['mime_type']
+        )
+
+    except Exception as e:
+        logger.error(f"Error downloading document: {str(e)}")
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/documents/upload', methods=['POST'])
+@login_required
+def upload_documents():
+    logger.debug("Processing temporary document upload")
+    try:
+        if 'files' not in request.files:
+            logger.warning("No files provided in request")
+            return jsonify({'error': 'No files provided'}), 400
+        
+        files = request.files.getlist('files')
+        description = request.form.get('description', '')
+        
+        if not files:
+            logger.warning("No files selected")
+            return jsonify({'error': 'No files selected'}), 400
+            
+        # Get document storage path
+        base_path = os.getenv('DOCUMENT_STORAGE_PATH', 'documents')
+        if not os.path.exists(base_path):
+            logger.debug(f"Creating document storage directory: {base_path}")
+            os.makedirs(base_path)
+            
+        uploaded_documents = []
+        for file in files:
+            if file and file.filename:
+                logger.debug(f"Processing file: {file.filename}")
+                # Create a temporary case ID for document storage
+                temp_case_id = str(ObjectId())
+                case_path = os.path.join(base_path, temp_case_id)
+                if not os.path.exists(case_path):
+                    logger.debug(f"Creating case directory: {case_path}")
+                    os.makedirs(case_path)
+                
+                # Save the file in version 1 directory
+                version_dir = os.path.join(case_path, "v1")
+                if not os.path.exists(version_dir):
+                    logger.debug(f"Creating version directory: {version_dir}")
+                    os.makedirs(version_dir)
+                
+                filename = secure_filename(file.filename)
+                file_path = os.path.join(version_dir, filename)
+                logger.debug(f"Saving file to: {file_path}")
+                file.save(file_path)
+                
+                # Create document record
+                document = {
+                    '_id': str(ObjectId()),
+                    'original_filename': file.filename,
+                    'filename': filename,
+                    'file_path': file_path,
+                    'description': description,
+                    'version': 1,
+                    'upload_date': datetime.utcnow(),
+                    'case_id': None,  # Will be set when case is created
+                    'temp_case_id': temp_case_id  # Store temp case ID for cleanup
+                }
+                
+                # Insert into MongoDB
+                logger.debug("Inserting document record into database")
+                result = documents_collection.insert_one(document)
+                document['_id'] = str(result.inserted_id)
+                uploaded_documents.append(document)
+                logger.debug(f"File {file.filename} uploaded successfully")
+        
+        logger.debug(f"Successfully uploaded {len(uploaded_documents)} documents")
+        return jsonify({'documents': uploaded_documents})
+    except Exception as e:
+        logger.error(f"Error uploading documents: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/case/documents/<document_id>', methods=['DELETE'])
+@login_required
+def delete_temp_document(document_id):
+    try:
+        # Find the document
+        document = documents_collection.find_one({'_id': ObjectId(document_id)})
+        if not document:
+            return jsonify({'error': 'Document not found'}), 404
+
+        # Delete the file
+        if os.path.exists(document['file_path']):
+            os.remove(document['file_path'])
+            
+            # Try to remove the version directory if it's empty
+            version_dir = os.path.dirname(document['file_path'])
+            if os.path.exists(version_dir) and not os.listdir(version_dir):
+                os.rmdir(version_dir)
+                
+            # Try to remove the case directory if it's empty
+            case_dir = os.path.dirname(version_dir)
+            if os.path.exists(case_dir) and not os.listdir(case_dir):
+                os.rmdir(case_dir)
+
+        # Delete from MongoDB
+        documents_collection.delete_one({'_id': ObjectId(document_id)})
+        
+        return jsonify({'message': 'Document deleted successfully'})
+    except Exception as e:
+        app.logger.error(f"Error deleting document: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/cases/add', methods=['POST'])
+def add_case():
+    try:
+        # Get form data
+        client_id = request.form.get('client_id')
+        title = request.form.get('title')
+        description = request.form.get('description')
+        case_type = request.form.get('case_type')
+        court_name = request.form.get('court_name')
+        case_number = request.form.get('case_number')
+        status = request.form.get('status')
+        start_date = request.form.get('start_date')
+        end_date = request.form.get('end_date')
+        priority = request.form.get('priority')
+        
+        # Create case document
+        case = {
+            'client_id': ObjectId(client_id),
+            'title': title,
+            'description': description,
+            'case_type': case_type,
+            'court_name': court_name,
+            'case_number': case_number,
+            'status': status,
+            'start_date': datetime.strptime(start_date, '%Y-%m-%d') if start_date else None,
+            'end_date': datetime.strptime(end_date, '%Y-%m-%d') if end_date else None,
+            'priority': priority,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        
+        # Insert case into MongoDB
+        result = cases_collection.insert_one(case)
+        case_id = result.inserted_id
+        
+        # Handle uploaded documents
+        uploaded_docs = request.form.get('uploaded_documents')
+        if uploaded_docs:
+            try:
+                doc_ids = json.loads(uploaded_docs)
+                # Update documents with case_id
+                for doc in doc_ids:
+                    documents_collection.update_one(
+                        {'_id': ObjectId(doc['id'])},
+                        {'$set': {'case_id': case_id}}
+                    )
+            except json.JSONDecodeError:
+                app.logger.error("Error parsing uploaded documents JSON")
+        
+        return jsonify({'success': True, 'case_id': str(case_id)})
+    except Exception as e:
+        app.logger.error(f"Error adding case: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/case/documents/temp_upload', methods=['POST'])
+@login_required
+def upload_temp_documents():
+    """Handle temporary document uploads for new cases before they are created."""
+    logger.debug("Processing temporary document upload for new case")
+    try:
+        if 'files' not in request.files:
+            logger.warning("No files provided in request")
+            return jsonify({'error': 'No files provided'}), 400
+        
+        files = request.files.getlist('files')
+        description = request.form.get('description', '')
+        logger.debug(f"Received {len(files)} files for upload")
+        
+        # Get document storage path
+        base_path = os.getenv('DOCUMENT_STORAGE_PATH', 'documents')
+        if not os.path.exists(base_path):
+            logger.debug(f"Creating document storage directory: {base_path}")
+            os.makedirs(base_path)
+            
+        uploaded_documents = []
+        for file in files:
+            if file and file.filename:
+                logger.debug(f"Processing file: {file.filename}")
+                # Create a temporary case ID for document storage
+                temp_case_id = str(ObjectId())
+                case_path = os.path.join(base_path, temp_case_id)
+                if not os.path.exists(case_path):
+                    logger.debug(f"Creating case directory: {case_path}")
+                    os.makedirs(case_path)
+                
+                # Save the file in version 1 directory
+                version_dir = os.path.join(case_path, "v1")
+                if not os.path.exists(version_dir):
+                    logger.debug(f"Creating version directory: {version_dir}")
+                    os.makedirs(version_dir)
+                
+                filename = secure_filename(file.filename)
+                file_path = os.path.join(version_dir, filename)
+                logger.debug(f"Saving file to: {file_path}")
+                file.save(file_path)
+                
+                # Create document info without database insertion
+                document = {
+                    '_id': str(ObjectId()),  # Generate ID for frontend reference
+                    'original_filename': file.filename,
+                    'filename': filename,
+                    'file_path': file_path,
+                    'description': description,
+                    'version': 1,
+                    'temp_case_id': temp_case_id
+                }
+                
+                uploaded_documents.append(document)
+                logger.debug(f"File {file.filename} uploaded successfully")
+        
+        logger.debug(f"Successfully uploaded {len(uploaded_documents)} documents")
+        return jsonify({
+            'message': 'Documents uploaded successfully',
+            'documents': uploaded_documents
+        })
+    except Exception as e:
+        logger.error(f"Error uploading documents: {str(e)}")
+        return jsonify({'error': str(e)}), 400
 
 if __name__ == '__main__':
     try:

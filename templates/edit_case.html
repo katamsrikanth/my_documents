@@ -11,7 +11,7 @@
     
     <div class="card">
         <div class="card-body">
-            <form id="editCaseForm" method="POST" action="{{ url_for('update_case', case_id=case._id) }}">
+            <form id="editCaseForm" method="POST" action="{{ url_for('update_case', case_id=case._id) }}" enctype="multipart/form-data">
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="client_id" class="form-label">Client *</label>
@@ -76,8 +76,62 @@
                     <label for="description" class="form-label">Description *</label>
                     <textarea class="form-control" id="description" name="description" rows="4" required>{{ case.description }}</textarea>
                 </div>
+
+                <!-- Document Upload Section -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Documents</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Document List -->
+                        <div id="documentList" class="mb-4">
+                            <h6>Uploaded Documents</h6>
+                            <div class="list-group">
+                                {% if case.documents %}
+                                    {% for doc in case.documents %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <i class="fas fa-file me-2"></i>
+                                            {{ doc.filename }}
+                                            <small class="text-muted ms-2">v{{ doc.version }}</small>
+                                        </div>
+                                        <div>
+                                            <a href="/document/{{ doc._id }}/download" class="btn btn-sm btn-info me-2">
+                                                <i class="fas fa-download"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-sm btn-danger" onclick="deleteDocument('{{ doc._id }}')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-muted">No documents uploaded yet</p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Document Upload Form -->
+                        <div class="card">
+                            <div class="card-body">
+                                <h6>Upload New Document</h6>
+                                <div class="mb-3">
+                                    <label for="documentFile" class="form-label">Select File</label>
+                                    <input type="file" class="form-control" id="documentFile" name="documentFile" multiple>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="documentDescription" class="form-label">Description</label>
+                                    <textarea class="form-control" id="documentDescription" name="documentDescription" rows="2"></textarea>
+                                </div>
+                                <button type="button" class="btn btn-primary" onclick="uploadDocuments()">
+                                    <i class="fas fa-upload me-2"></i>Upload Documents
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 
-                <div class="d-flex justify-content-end gap-2">
+                <div class="d-flex justify-content-end gap-2 mt-4">
                     <a href="{{ url_for('cases') }}" class="btn btn-secondary">Cancel</a>
                     <button type="submit" class="btn btn-primary">Update Case</button>
                 </div>
@@ -85,4 +139,59 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function uploadDocuments() {
+    const fileInput = document.getElementById('documentFile');
+    const description = document.getElementById('documentDescription').value;
+    
+    if (!fileInput.files.length) {
+        alert('Please select at least one file to upload');
+        return;
+    }
+    
+    const formData = new FormData();
+    for (let i = 0; i < fileInput.files.length; i++) {
+        formData.append('files', fileInput.files[i]);
+    }
+    formData.append('description', description);
+    
+    fetch(`/case/{{ case._id }}/documents`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        location.reload();
+    })
+    .catch(error => {
+        alert('Error uploading documents: ' + error.message);
+    });
+}
+
+function deleteDocument(documentId) {
+    if (!confirm('Are you sure you want to delete this document?')) {
+        return;
+    }
+    
+    fetch(`/case/{{ case._id }}/documents/${documentId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        location.reload();
+    })
+    .catch(error => {
+        alert('Error deleting document: ' + error.message);
+    });
+}
+</script>
 {% endblock %} 

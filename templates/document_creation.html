@@ -226,7 +226,7 @@
         const title = document.getElementById('title').value;
         const content = document.getElementById('generatedDoc').innerHTML;
         
-        fetch('/download_document', {
+        fetch('/download_generated_document', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
