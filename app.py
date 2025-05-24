@@ -146,25 +146,10 @@ def search_page():
             doc_type = doc_type.replace('%20', ' ')
             logger.info(f"Searching for documents with type: {doc_type}")
             
-            doc_type_variations = list(set([
-                doc_type,
-                doc_type.lower(),
-                doc_type.upper(),
-                doc_type.title(),
-                "Legal templates",
-                "legal templates",
-                "LEGAL TEMPLATES"
-            ]))
-
             filter_clause = {
-                "operator": "Or",
-                "operands": [
-                    {
                         "path": ["doc_type"],
                         "operator": "Equal",
-                        "valueString": variation
-                    } for variation in doc_type_variations
-                ]
+                "valueString": doc_type
             }
 
         # Fetch all documents using offset-based pagination
@@ -734,9 +719,6 @@ def perform_search(query, document_name=None):
         query = clean_text(query)
         try:
             logger.debug(f"Querying Document with query: '{query}', document_name: '{document_name}'")
-            if not document_name:
-                logger.error("No document_name provided for search with .with_where. Please select a document.")
-                return []
             
             # Create the query builder
             query_builder = client.query.get("Document", ["document_name", "chunk_index", "content", "doc_type"])
@@ -748,16 +730,17 @@ def perform_search(query, document_name=None):
                 )
             
             # Add where filter if provided
-            if isinstance(document_name, dict):
-                # If it's already a filter object, use it directly
-                query_builder = query_builder.with_where(document_name)
-            elif isinstance(document_name, str):
-                # Create a simple equality filter for document name
-                query_builder = query_builder.with_where({
-                    "path": ["document_name"],
-                    "operator": "Equal",
-                    "valueString": document_name
-                })
+            if document_name:
+                if isinstance(document_name, dict):
+                    # If it's already a filter object, use it directly
+                    query_builder = query_builder.with_where(document_name)
+                elif isinstance(document_name, str):
+                    # Create a simple equality filter for document name
+                    query_builder = query_builder.with_where({
+                        "path": ["document_name"],
+                        "operator": "Equal",
+                        "valueString": document_name
+                    })
             
             # Execute the query
             result = query_builder.with_limit(5).do()
@@ -779,11 +762,7 @@ def perform_search(query, document_name=None):
                 all_chunks_result = (
                     client.query
                     .get("Document", ["document_name", "chunk_index", "content", "doc_type"])
-                    .with_where({
-                        "path": ["document_name"],
-                        "operator": "Equal",
-                        "valueString": document_name if isinstance(document_name, str) else None
-                    })
+                    .with_where(document_name if isinstance(document_name, dict) else None)
                     .with_limit(100)
                     .do()
                 )
@@ -1048,28 +1027,13 @@ def search():
         
         # Add document type filter if specified
         if doc_type:
-            doc_type_variations = list(set([
-                doc_type,
-                doc_type.lower(),
-                doc_type.upper(),
-                doc_type.title(),
-                "Legal templates",
-                "legal templates",
-                "LEGAL TEMPLATES"
-            ]))
-            
-            type_conditions = [{
+            filter_conditions.append({
                 "path": ["doc_type"],
                 "operator": "Equal",
-                "valueString": variation
-            } for variation in doc_type_variations]
-            
-            filter_conditions.append({
-                "operator": "Or",
-                "operands": type_conditions
+                "valueString": doc_type
             })
         
-        # Combine all filters with AND
+        # Combine all filters with AND if any filters exist
         where_filter = {
             "operator": "And",
             "operands": filter_conditions
@@ -1090,7 +1054,8 @@ def search():
                 'document_name': result.get('document_name', ''),
                 'chunk_index': result.get('chunk_index'),
                 'content': result.get('content', ''),
-                'summary': result.get('summary', '')
+                'summary': result.get('summary', ''),
+                'doc_type': result.get('doc_type', '')  # Add document type to results
             }
             serialized_results.append(serialized_result)
         
@@ -1156,26 +1121,11 @@ def manage_collections():
         if doc_type:
             doc_type = doc_type.replace('%20', ' ')
             logger.info(f"Searching for documents with type: {doc_type}")
-            
-            doc_type_variations = list(set([
-                doc_type,
-                doc_type.lower(),
-                doc_type.upper(),
-                doc_type.title(),
-                "Legal templates",
-                "legal templates",
-                "LEGAL TEMPLATES"
-            ]))
 
             filter_clause = {
-                "operator": "Or",
-                "operands": [
-                    {
                         "path": ["doc_type"],
                         "operator": "Equal",
-                        "valueString": variation
-                    } for variation in doc_type_variations
-                ]
+                "valueString": doc_type
             }
 
         # Fetch all documents using offset-based pagination
@@ -1880,148 +1830,233 @@ def debug_chunks(document_name):
         logger.error(f"Error in debug_chunks: {str(e)}")
         return jsonify({"error": str(e)})
 
-def search_court_cases(query, filters=None, limit=10):
-    """Search court cases in Document collection with metadata filters"""
+def search_court_cases(query, filters=None):
     try:
-        # Add document type filter to only get court cases
-        doc_type_conditions = []
-        for doc_type in ["court case", "legal case", "legal cases"]:
-            doc_type_conditions.append({
-                "path": ["doc_type"],
-                "operator": "Equal",
-                "valueString": doc_type
-            })
-        
-        # Combine document type conditions with OR
+        if not client:
+            logger.error("Weaviate client not initialized")
+            return {"error": "Weaviate client not initialized"}, 500
+
+        logger.info(f"Starting search with query: {query}")
+        logger.info(f"Filters: {filters}")
+
+        # Create base filter for document types
         doc_type_filter = {
             "operator": "Or",
-            "operands": doc_type_conditions
+            "operands": [
+                {"path": ["doc_type"], "operator": "Equal", "valueText": "court case"},
+                {"path": ["doc_type"], "operator": "Equal", "valueText": "legal case"},
+                {"path": ["doc_type"], "operator": "Equal", "valueText": "legal cases"}
+            ]
         }
-        
-        # Add other filters if present
-        filter_conditions = [doc_type_filter]
+
+        # Combine with additional filters if provided
         if filters:
+            filter_conditions = [doc_type_filter]
+            
+            # Handle each filter based on its data type
             for field, value in filters.items():
                 if value:  # Only add non-empty filters
-                    filter_conditions.append({
-                        "path": [field],
-                        "operator": "Like",
-                        "valueString": f"*{value}*"  # Using Like for partial matches
+                    logger.info(f"Adding filter for field: {field} with value: {value}")
+                    if field in ["judges", "keywords", "statutes_cited"]:
+                        # Array fields use ContainsAny operator
+                        filter_conditions.append({
+                            "path": [field],
+                            "operator": "ContainsAny",
+                            "valueText": [value] if isinstance(value, str) else value
+                        })
+                    elif field == "decision_date":
+                        # Date field - use Equal for exact match
+                        filter_conditions.append({
+                            "path": [field],
+                            "operator": "Equal",
+                            "valueText": value
+                        })
+                    else:
+                        # All other text fields use Equal for exact match
+                        filter_conditions.append({
+                            "path": [field],
+                            "operator": "Equal",
+                            "valueText": value
                     })
         
         # Combine all conditions with AND
-        where_filter = {
+            filter_clause = {
             "operator": "And",
             "operands": filter_conditions
         }
+        else:
+            filter_clause = doc_type_filter
         
-        # Define all metadata fields to retrieve
+        logger.info(f"Final filter clause: {json.dumps(filter_clause, indent=2)}")
+
+        # Get metadata fields
         metadata_fields = [
             "document_name", "content", "case_title", "citation", "court",
-            "jurisdiction", "decision_date", "calendar_date", "docket_number",
-            "parties", "issue", "outcome", "judges", "authoring_judge",
-            "petitioner_attorney", "respondent_attorney", "publisher",
-            "statutes_cited", "prior_history", "keywords", "document_status",
-            "source", "doc_type"
+            "jurisdiction", "decision_date", "docket_number", "parties",
+            "judges", "authoring_judge", "keywords", "statutes_cited",
+            "calendar_date", "petitioner_attorney", "respondent_attorney",
+            "document_status", "source", "issue", "outcome", "prior_history"
         ]
-        
-        # Define searchable properties for bm25
-        search_properties = [
-            "content", "case_title", "citation", "court", "jurisdiction",
-            "docket_number", "parties", "issue", "outcome", "judges",
-            "authoring_judge", "petitioner_attorney", "respondent_attorney",
-            "prior_history", "keywords"
+
+        # Define searchable properties for BM25
+        searchable_properties = [
+            "content", "case_title", "citation", "court", 
+            "jurisdiction", "parties", "judges", "authoring_judge",
+            "keywords", "statutes_cited", "issue", "outcome", "prior_history"
         ]
-        
-        logger.info(f"Searching court cases with query: {query}")
-        logger.info(f"Using filters: {json.dumps(filters, indent=2)}")
-        logger.info(f"Using where filter: {json.dumps(where_filter, indent=2)}")
-        
-        # Track seen document names to avoid duplicates
-        seen_docs = set()
+
+        # Initialize results list
         results = []
-        
-        # If we have a query, try BM25 search first
-        if query:
-            response = (
-                client.query
-                .get("Document", metadata_fields)
-                .with_bm25(
-                    query=query,
-                    properties=search_properties
+        offset = 0
+        batch_size = 1000
+
+        while True:
+            try:
+                # BM25 search
+                bm25_query = client.query.get(
+                    "Document",
+                    metadata_fields
                 )
-                .with_where(where_filter)
-                .with_limit(limit)
-            )
-            
-            result = response.do()
-            logger.info(f"BM25 search response: {json.dumps(result, indent=2)}")
-            
-            if "data" in result and "Get" in result["data"] and "Document" in result["data"]["Get"]:
-                for doc in result["data"]["Get"]["Document"]:
-                    doc_name = doc.get("document_name")
-                    if doc_name and doc_name not in seen_docs:
-                        seen_docs.add(doc_name)
-                        results.append(doc)
-                logger.info(f"Found {len(results)} unique results from BM25 search")
-        
-        # If we need more results, try vector search
-        if len(results) < limit:
-            response = (
-                client.query
-                .get("Document", metadata_fields)
-                .with_near_text({
-                    "concepts": [query] if query else ["court case"]
-                })
-                .with_where(where_filter)
-                .with_limit(limit - len(results))  # Only get the remaining number of results needed
-            )
-            
-            result = response.do()
-            logger.info(f"Vector search response: {json.dumps(result, indent=2)}")
-            
-            if "data" in result and "Get" in result["data"] and "Document" in result["data"]["Get"]:
-                for doc in result["data"]["Get"]["Document"]:
-                    doc_name = doc.get("document_name")
-                    if doc_name and doc_name not in seen_docs:
-                        seen_docs.add(doc_name)
-                        results.append(doc)
-                logger.info(f"Added {len(results) - len(seen_docs)} unique results from vector search")
-        
-        # Format results
-        formatted_results = []
-        for result in results:
-            # Create a formatted result with all metadata
-            formatted_result = {
-                "title": result.get("case_title", result.get("document_name", "Unknown Case")),
-                "citation": result.get("citation", "Not specified"),
-                "court": result.get("court", "Not specified"),
-                "jurisdiction": result.get("jurisdiction", "Not specified"),
-                "decision_date": result.get("decision_date", "Not specified"),
-                "calendar_date": result.get("calendar_date", "Not specified"),
-                "docket_number": result.get("docket_number", "Not specified"),
-                "parties": result.get("parties", "Not specified"),
-                "issue": result.get("issue", "Not specified"),
-                "outcome": result.get("outcome", "Not specified"),
-                "judges": result.get("judges", []),
-                "authoring_judge": result.get("authoring_judge", "Not specified"),
-                "petitioner_attorney": result.get("petitioner_attorney", "Not specified"),
-                "respondent_attorney": result.get("respondent_attorney", "Not specified"),
-                "publisher": result.get("publisher", "Not specified"),
-                "statutes_cited": result.get("statutes_cited", []),
-                "prior_history": result.get("prior_history", "Not specified"),
-                "keywords": result.get("keywords", []),
-                "document_status": result.get("document_status", "Not specified"),
-                "source": result.get("source", "Not specified"),
-                "content": result.get("content", "")
-            }
-            formatted_results.append(formatted_result)
-            logger.info(f"Formatted result: {json.dumps(formatted_result, indent=2)}")
-        
-        return formatted_results
+
+                # Only add BM25 if there's a query
+                if query and query.strip():
+                    bm25_query = bm25_query.with_bm25(
+                        query=query,
+                        properties=searchable_properties
+                    )
+
+                # Add filters
+                bm25_query = bm25_query.with_where(
+                    filter_clause
+                ).with_limit(batch_size).with_offset(offset)
+
+                logger.info(f"Executing BM25 search with offset {offset}")
+                bm25_results = bm25_query.do()
+                logger.info(f"BM25 results: {json.dumps(bm25_results, indent=2)}")
+
+                # Vector search - only if we have a query
+                try:
+                    if query and query.strip():
+                        # First try to get a vector representation
+                        bm25_for_vector = client.query.get(
+                            "Document", 
+                            ["content", "_additional {vector}"]
+                        ).with_bm25(
+                            query=query,
+                            properties=["content"]
+                        ).with_limit(1).do()
+
+                        if (bm25_for_vector and 
+                            "data" in bm25_for_vector and 
+                            "Get" in bm25_for_vector["data"] and 
+                            "Document" in bm25_for_vector["data"]["Get"] and 
+                            bm25_for_vector["data"]["Get"]["Document"]):
+                            
+                            vector = bm25_for_vector["data"]["Get"]["Document"][0]["_additional"]["vector"]
+                            
+                            vector_query = client.query.get(
+                                "Document",
+                                metadata_fields
+                            ).with_near_vector({
+                                "vector": vector
+                            }).with_where(
+                                filter_clause
+                            ).with_limit(batch_size).with_offset(offset)
+
+                            logger.info(f"Executing vector search with offset {offset}")
+                            vector_results = vector_query.do()
+                            logger.info(f"Vector results: {json.dumps(vector_results, indent=2)}")
+                        else:
+                            logger.warning("No results from BM25 query for vector search, skipping vector search")
+                            vector_results = None
+                    else:
+                        logger.info("No query provided, skipping vector search")
+                        vector_results = None
+                except Exception as e:
+                    logger.error(f"Error in vector search: {str(e)}")
+                    vector_results = None
+
+                # Process results
+                bm25_docs = []
+                vector_docs = []
+
+                # Safely extract documents from BM25 results
+                if bm25_results and isinstance(bm25_results, dict):
+                    if "data" in bm25_results and isinstance(bm25_results["data"], dict):
+                        if "Get" in bm25_results["data"] and isinstance(bm25_results["data"]["Get"], dict):
+                            if "Document" in bm25_results["data"]["Get"] and isinstance(bm25_results["data"]["Get"]["Document"], list):
+                                bm25_docs = bm25_results["data"]["Get"]["Document"]
+                                if bm25_docs:  # Only extend if we have documents
+                                    results.extend(bm25_docs)
+                                    logger.info(f"Added {len(bm25_docs)} documents from BM25 search")
+
+                # Safely extract documents from vector results
+                if vector_results and isinstance(vector_results, dict):
+                    if "data" in vector_results and isinstance(vector_results["data"], dict):
+                        if "Get" in vector_results["data"] and isinstance(vector_results["data"]["Get"], dict):
+                            if "Document" in vector_results["data"]["Get"] and isinstance(vector_results["data"]["Get"]["Document"], list):
+                                vector_docs = vector_results["data"]["Get"]["Document"]
+                                if vector_docs:  # Only extend if we have documents
+                                    results.extend(vector_docs)
+                                    logger.info(f"Added {len(vector_docs)} documents from vector search")
+
+                # Break if no more results
+                if (not bm25_docs and not vector_docs) or len(results) >= 10000:
+                    logger.info("No more results found or reached maximum limit")
+                    break
+
+                offset += batch_size
+
+            except Exception as e:
+                logger.error(f"Error in search batch: {str(e)}")
+                logger.error(f"Stack trace: {traceback.format_exc()}")
+                break
+
+        # Remove duplicates based on document_name and format results
+        seen = set()
+        unique_results = []
+        for doc in results:
+            if doc and isinstance(doc, dict) and "document_name" in doc and doc["document_name"] not in seen:
+                seen.add(doc["document_name"])
+                # Format the document metadata with default values
+                formatted_doc = {
+                    "document_name": doc.get("document_name", ""),
+                    "content": doc.get("content", ""),
+                    "case_title": doc.get("case_title", ""),
+                    "citation": doc.get("citation", ""),
+                    "court": doc.get("court", ""),
+                    "jurisdiction": doc.get("jurisdiction", ""),
+                    "decision_date": doc.get("decision_date", ""),
+                    "calendar_date": doc.get("calendar_date", ""),
+                    "docket_number": doc.get("docket_number", ""),
+                    "parties": doc.get("parties", ""),
+                    "judges": doc.get("judges", []),
+                    "authoring_judge": doc.get("authoring_judge", ""),
+                    "petitioner_attorney": doc.get("petitioner_attorney", ""),
+                    "respondent_attorney": doc.get("respondent_attorney", ""),
+                    "document_status": doc.get("document_status", ""),
+                    "source": doc.get("source", ""),
+                    "keywords": doc.get("keywords", []),
+                    "statutes_cited": doc.get("statutes_cited", []),
+                    "issue": doc.get("issue", ""),
+                    "outcome": doc.get("outcome", ""),
+                    "prior_history": doc.get("prior_history", "")
+                }
+                unique_results.append(formatted_doc)
+
+        # Log the results for debugging
+        logger.info(f"Found {len(unique_results)} unique results")
+        for doc in unique_results:
+            logger.info(f"Document: {doc['document_name']}")
+            logger.info(f"Judges: {doc['judges']}")
+            logger.info(f"Court: {doc['court']}")
+
+        return {"results": unique_results}
+
     except Exception as e:
-        logger.error(f"Error searching court cases: {str(e)}")
-        return []
+        logger.error(f"Error in search_court_cases: {str(e)}")
+        logger.error(f"Stack trace: {traceback.format_exc()}")
+        return {"error": str(e)}, 500
 
 @app.route('/court_cases')
 @login_required
@@ -2052,9 +2087,18 @@ def search_court_cases_route():
             return jsonify({"error": "Please provide a search query or at least one filter"}), 400
             
         results = search_court_cases(query, filters)
-        return jsonify({"results": results})
+        if isinstance(results, tuple) and len(results) == 2 and results[1] == 500:
+            return jsonify({"error": results[0]}), 500
+            
+        # Ensure we're returning the results in the expected format
+        if isinstance(results, dict) and "results" in results:
+            return jsonify(results)
+        else:
+            return jsonify({"results": results})
+            
     except Exception as e:
-        logger.error(f"Error in court cases search: {str(e)}")
+        logger.error(f"Error in search_court_cases_route: {str(e)}")
+        logger.error(f"Stack trace: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 def upload_court_case(title, date, state, verdict, description):
@@ -2455,26 +2499,11 @@ def search_documents():
         if doc_type:
             doc_type = doc_type.replace('%20', ' ')
             logger.info(f"Searching for documents with type: {doc_type}")
-            
-            doc_type_variations = list(set([
-                doc_type,
-                doc_type.lower(),
-                doc_type.upper(),
-                doc_type.title(),
-                "Legal templates",
-                "legal templates",
-                "LEGAL TEMPLATES"
-            ]))
 
             filter_clause = {
-                "operator": "Or",
-                "operands": [
-                    {
                         "path": ["doc_type"],
                         "operator": "Equal",
-                        "valueString": variation
-                    } for variation in doc_type_variations
-                ]
+                "valueString": doc_type
             }
 
         # Fetch all documents using offset-based pagination
@@ -2602,31 +2631,16 @@ def get_documents():
         if doc_type:
             doc_type = doc_type.replace('%20', ' ')
             logger.info(f"Searching for documents with type: {doc_type}")
-            
-            doc_type_variations = list(set([
-                doc_type,
-                doc_type.lower(),
-                doc_type.upper(),
-                doc_type.title(),
-                "Legal templates",
-                "legal templates",
-                "LEGAL TEMPLATES"
-            ]))
 
             filter_clause = {
-                "operator": "Or",
-                "operands": [
-                    {
                         "path": ["doc_type"],
                         "operator": "Equal",
-                        "valueString": variation
-                    } for variation in doc_type_variations
-                ]
+                "valueString": doc_type
             }
 
-        # Fetch documents using offset-based pagination
+        # Fetch documents using offset-based pagination with increased batch size
         offset = 0
-        batch_size = 3000
+        batch_size = 10000  # Increased from 3000 to 10000
         all_results = []
 
         while True:
@@ -2649,6 +2663,7 @@ def get_documents():
 
             all_results.extend(documents)
             offset += batch_size
+            logger.info(f"Fetched {len(documents)} documents in current batch, total so far: {len(all_results)}")
 
         # Process results to get unique document names
         doc_info = {}
@@ -3157,6 +3172,48 @@ def edit_appointment(appointment_id):
     
     cases = Case.get_all()
     return render_template('edit_appointment.html', appointment=appointment, cases=cases)
+
+@app.route('/debug/court_cases')
+@login_required
+def debug_court_cases():
+    """Debug route to check court cases data in the database"""
+    try:
+        # Get all court cases
+        result = (
+            client.query
+            .get("Document", [
+                "document_name", "case_title", "citation", "court",
+                "jurisdiction", "decision_date", "docket_number", "parties",
+                "judges", "authoring_judge"
+            ])
+            .with_where({
+                "operator": "Or",
+                "operands": [
+                    {"path": ["doc_type"], "operator": "Equal", "valueText": "court case"},
+                    {"path": ["doc_type"], "operator": "Equal", "valueText": "legal case"},
+                    {"path": ["doc_type"], "operator": "Equal", "valueText": "legal cases"}
+                ]
+            })
+            .with_limit(10)
+            .do()
+        )
+
+        if "data" in result and "Get" in result["data"] and "Document" in result["data"]["Get"]:
+            documents = result["data"]["Get"]["Document"]
+            return jsonify({
+                "count": len(documents),
+                "documents": documents
+            })
+        else:
+            return jsonify({
+                "error": "No documents found",
+                "raw_response": result
+            }), 404
+
+    except Exception as e:
+        logger.error(f"Error in debug_court_cases: {str(e)}")
+        logger.error(f"Stack trace: {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     try:

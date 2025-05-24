@@ -88,6 +88,10 @@ function searchCases(event) {
         authoring_judge: document.getElementById('authoring_judge').value
     };
     
+    // Show loading state
+    const resultsDiv = document.getElementById('searchResults');
+    resultsDiv.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p>Searching...</p></div>';
+    
     fetch('/search_court_cases', {
         method: 'POST',
         headers: {
@@ -100,7 +104,7 @@ function searchCases(event) {
         if (data.error) {
             displayError(data.error);
         } else {
-            displayResults(data.results);
+            displayResults(data.results || []);
         }
     })
     .catch(error => {
@@ -121,45 +125,45 @@ function displayResults(results) {
         html += `
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0">${result.title}</h5>
+                    <h5 class="mb-0">${result.case_title || 'Untitled Case'}</h5>
                 </div>
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <p><strong>Citation:</strong> ${result.citation}</p>
-                            <p><strong>Court:</strong> ${result.court}</p>
-                            <p><strong>Jurisdiction:</strong> ${result.jurisdiction}</p>
-                            <p><strong>Decision Date:</strong> ${result.decision_date}</p>
-                            <p><strong>Calendar Date:</strong> ${result.calendar_date}</p>
-                            <p><strong>Docket Number:</strong> ${result.docket_number}</p>
-                            <p><strong>Parties:</strong> ${result.parties}</p>
+                            <p><strong>Citation:</strong> ${result.citation || 'N/A'}</p>
+                            <p><strong>Court:</strong> ${result.court || 'N/A'}</p>
+                            <p><strong>Jurisdiction:</strong> ${result.jurisdiction || 'N/A'}</p>
+                            <p><strong>Decision Date:</strong> ${result.decision_date || 'N/A'}</p>
+                            <p><strong>Calendar Date:</strong> ${result.calendar_date || 'N/A'}</p>
+                            <p><strong>Docket Number:</strong> ${result.docket_number || 'N/A'}</p>
+                            <p><strong>Parties:</strong> ${result.parties || 'N/A'}</p>
                         </div>
                         <div class="col-md-6">
-                            <p><strong>Judges:</strong> ${Array.isArray(result.judges) ? result.judges.join(', ') : result.judges}</p>
-                            <p><strong>Authoring Judge:</strong> ${result.authoring_judge}</p>
-                            <p><strong>Petitioner's Attorney:</strong> ${result.petitioner_attorney}</p>
-                            <p><strong>Respondent's Attorney:</strong> ${result.respondent_attorney}</p>
-                            <p><strong>Publisher:</strong> ${result.publisher}</p>
-                            <p><strong>Document Status:</strong> ${result.document_status}</p>
-                            <p><strong>Source:</strong> ${result.source}</p>
+                            <p><strong>Judges:</strong> ${Array.isArray(result.judges) ? result.judges.join(', ') : (result.judges || 'N/A')}</p>
+                            <p><strong>Authoring Judge:</strong> ${result.authoring_judge || 'N/A'}</p>
+                            <p><strong>Petitioner's Attorney:</strong> ${result.petitioner_attorney || 'N/A'}</p>
+                            <p><strong>Respondent's Attorney:</strong> ${result.respondent_attorney || 'N/A'}</p>
+                            <p><strong>Publisher:</strong> ${result.publisher || 'N/A'}</p>
+                            <p><strong>Document Status:</strong> ${result.document_status || 'N/A'}</p>
+                            <p><strong>Source:</strong> ${result.source || 'N/A'}</p>
                         </div>
                     </div>
                     
                     <div class="mt-3">
                         <h6>Issue:</h6>
-                        <p>${result.issue}</p>
+                        <p>${result.issue || 'N/A'}</p>
                         
                         <h6>Outcome:</h6>
-                        <p>${result.outcome}</p>
+                        <p>${result.outcome || 'N/A'}</p>
                         
                         <h6>Prior History:</h6>
-                        <p>${result.prior_history}</p>
+                        <p>${result.prior_history || 'N/A'}</p>
                         
                         <h6>Statutes Cited:</h6>
-                        <p>${Array.isArray(result.statutes_cited) ? result.statutes_cited.join(', ') : result.statutes_cited}</p>
+                        <p>${Array.isArray(result.statutes_cited) ? result.statutes_cited.join(', ') : (result.statutes_cited || 'N/A')}</p>
                         
                         <h6>Keywords:</h6>
-                        <p>${Array.isArray(result.keywords) ? result.keywords.join(', ') : result.keywords}</p>
+                        <p>${Array.isArray(result.keywords) ? result.keywords.join(', ') : (result.keywords || 'N/A')}</p>
                     </div>
                 </div>
             </div>
