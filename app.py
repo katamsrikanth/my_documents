@@ -1877,7 +1877,7 @@ def search_court_cases(query, filters=None):
                             "path": [field],
                             "operator": "Equal",
                             "valueText": value
-                    })
+                        })
         
         # Combine all conditions with AND
             filter_clause = {
@@ -1921,7 +1921,7 @@ def search_court_cases(query, filters=None):
                 # Only add BM25 if there's a query
                 if query and query.strip():
                     bm25_query = bm25_query.with_bm25(
-                        query=query,
+                    query=query,
                         properties=searchable_properties
                     )
 
@@ -3172,48 +3172,6 @@ def edit_appointment(appointment_id):
     
     cases = Case.get_all()
     return render_template('edit_appointment.html', appointment=appointment, cases=cases)
-
-@app.route('/debug/court_cases')
-@login_required
-def debug_court_cases():
-    """Debug route to check court cases data in the database"""
-    try:
-        # Get all court cases
-        result = (
-            client.query
-            .get("Document", [
-                "document_name", "case_title", "citation", "court",
-                "jurisdiction", "decision_date", "docket_number", "parties",
-                "judges", "authoring_judge"
-            ])
-            .with_where({
-                "operator": "Or",
-                "operands": [
-                    {"path": ["doc_type"], "operator": "Equal", "valueText": "court case"},
-                    {"path": ["doc_type"], "operator": "Equal", "valueText": "legal case"},
-                    {"path": ["doc_type"], "operator": "Equal", "valueText": "legal cases"}
-                ]
-            })
-            .with_limit(10)
-            .do()
-        )
-
-        if "data" in result and "Get" in result["data"] and "Document" in result["data"]["Get"]:
-            documents = result["data"]["Get"]["Document"]
-            return jsonify({
-                "count": len(documents),
-                "documents": documents
-            })
-        else:
-            return jsonify({
-                "error": "No documents found",
-                "raw_response": result
-            }), 404
-
-    except Exception as e:
-        logger.error(f"Error in debug_court_cases: {str(e)}")
-        logger.error(f"Stack trace: {traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     try:
