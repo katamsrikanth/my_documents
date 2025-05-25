@@ -33,6 +33,7 @@ from models.appointment import Appointment
 from models.initial_inquiry import InitialInquiry
 from models.attorney import Attorney
 from bson import ObjectId  # Add this import at the top if not present
+import uuid
 
 # Load environment variables
 load_dotenv()
@@ -61,6 +62,15 @@ logging.getLogger('werkzeug').setLevel(logging.DEBUG)
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'  # Change this to a secure secret key
+
+# Initialize MongoDB collections
+from models.user import User
+db = User.db
+clients_collection = db.clients
+cases_collection = db.cases
+documents_collection = db.documents
+appointments_collection = db.appointments
+initial_inquiries_collection = db.initial_inquiries
 
 # Register cleanup function
 @atexit.register
@@ -2714,47 +2724,88 @@ def add_client_page():
 @app.route('/client', methods=['POST'])
 @login_required
 def add_client():
+    """Create a new client."""
     try:
-        client = Client(
-            first_name=request.form['first_name'],
-            last_name=request.form['last_name'],
-            email=request.form['email'],
-            phone_number=request.form['phone_number'],
-            alternate_number=request.form.get('alternate_number'),
-            address=request.form.get('address'),
-            city=request.form.get('city'),
-            state=request.form.get('state'),
-            zip_code=request.form.get('zip_code'),
-            country=request.form.get('country'),
-            preferred_contact=request.form.get('preferred_contact', 'email'),
-            client_type=request.form['client_type']
-        )
-        client.save()
-        flash('Client added successfully!', 'success')
+        # Get form data
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        email = request.form.get('email')
+        phone = request.form.get('phone')
+        address = request.form.get('address')
+
+        # Validate required fields
+        if not all([first_name, last_name, email]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Generate a unique client ID
+        client_id = str(uuid.uuid4())
+
+        # Create client document
+        client_data = {
+            'client_id': client_id,  # Store as string
+            'first_name': first_name,
+            'last_name': last_name,
+            'email': email,
+            'phone': phone,
+            'address': address,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+
+        # Insert into database
+        result = clients_collection.insert_one(client_data)
+        client_data['_id'] = str(result.inserted_id)
+
+        return jsonify({
+            'success': True,
+            'message': 'Client created successfully',
+            'client': client_data
+        })
+
     except Exception as e:
-        flash(f'Error adding client: {str(e)}', 'error')
-    return redirect(url_for('clients'))
+        logger.error(f"Error creating client: {str(e)}")
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/client/<client_id>')
 @login_required
 def get_client(client_id):
-    client = Client.get_by_id(client_id)
-    if client:
-        # Convert ObjectId to string for JSON serialization
-        client['_id'] = str(client['_id'])
-        return jsonify(client)
-    return jsonify({'error': 'Client not found'}), 404
+    try:
+        client = Client.get_by_id(client_id)
+        if not client:
+            return jsonify({'error': 'Client not found'}), 404
+            
+        # Convert client data to a dictionary format using to_dict()
+        client_data = client.to_dict()
+        
+        return jsonify(client_data)
+    except Exception as e:
+        logger.error(f"Error fetching client: {str(e)}")
+        logger.error(f"Stack trace: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/client/<client_id>', methods=['PUT'])
 @login_required
 def update_client(client_id):
     try:
+        # Get the client first
+        client = Client.get_by_id(client_id)
+        if not client:
+            return jsonify({'error': 'Client not found'}), 404
+
+        # Get update data from request
         update_data = request.json
-        result = Client.update(client_id, update_data)
-        if result.modified_count > 0:
-            return jsonify({'success': True})
-        return jsonify({'error': 'Client not found'}), 404
+
+        # Update client attributes
+        for key, value in update_data.items():
+            if hasattr(client, key):
+                setattr(client, key, value)
+
+        # Update the client in the database
+        client.update()
+
+        return jsonify({'success': True, 'message': 'Client updated successfully'})
     except Exception as e:
+        logger.error(f"Error updating client: {str(e)}")
         return jsonify({'error': str(e)}), 400
 
 @app.route('/client/<client_id>', methods=['DELETE'])
@@ -2771,91 +2822,105 @@ def delete_client(client_id):
 @app.route('/cases')
 @login_required
 def cases():
-    search_query = request.args.get('search', '')
-    if search_query:
-        cases = Case.search(search_query)
-    else:
+    """Display all cases."""
+    try:
+        # Get all cases using the Case model
         cases = Case.get_all()
-    
-    # Get client names for each case
-    for case in cases:
-        try:
-            client = Client.get_by_id(case['client_id'])
-            case['client_name'] = f"{client['first_name']} {client['last_name']}" if client else 'Unknown Client'
-        except Exception as e:
-            logger.error(f"Error fetching client for case: {str(e)}")
-            case['client_name'] = 'Unknown Client'
-    
-    clients = Client.get_all()  # For the add case form
-    return render_template('cases.html', cases=cases, clients=clients)
+        
+        # Get all clients for the dropdown
+        clients = Client.get_all()
+        
+        # Format the cases data
+        formatted_cases = []
+        for case in cases:
+            try:
+                # Get client information
+                client = Client.get_by_id(case.get('client_id'))
+                if client:
+                    client_data = client.to_dict()
+                    client_name = f"{client_data['first_name']} {client_data['last_name']}"
+                else:
+                    client_name = 'Unknown'
+                
+                formatted_case = {
+                    '_id': str(case['_id']),
+                    'case_number': case.get('case_number', 'N/A'),
+                    'client_name': client_name,
+                    'case_type': case.get('case_type', 'N/A'),
+                    'status': case.get('status', 'N/A'),
+                    'start_date': case.get('start_date', 'N/A'),
+                    'priority': case.get('priority', 'N/A')
+                }
+                formatted_cases.append(formatted_case)
+            except Exception as case_error:
+                logger.error(f"Error formatting case {case.get('_id')}: {str(case_error)}")
+                continue
+        
+        return render_template('cases.html', cases=formatted_cases, clients=clients)
+    except Exception as e:
+        logger.error(f"Error loading cases: {str(e)}")
+        logger.error(f"Stack trace: {traceback.format_exc()}")
+        flash('Error loading cases. Please try again.', 'error')
+        return render_template('cases.html', cases=[], clients=[])
 
 @app.route('/cases/add', methods=['GET', 'POST'])
 @login_required
 def add_case_page():
-    logger.debug("Accessing add case page")
-    if request.method == 'POST':
-        logger.debug("Processing add case POST request")
-        try:
-            # Get form data
-            client_id = request.form.get('client_id')
-            title = request.form.get('title')
-            description = request.form.get('description')
-            case_type = request.form.get('case_type')
-            court_name = request.form.get('court_name')
-            case_number = request.form.get('case_number')
-            status = request.form.get('status')
-            start_date = request.form.get('start_date')
-            end_date = request.form.get('end_date')
-            priority = request.form.get('priority')
-            
-            logger.debug(f"Received case data - Title: {title}, Type: {case_type}, Status: {status}")
-            
-            # Create case document
-            case = {
-                'client_id': ObjectId(client_id),
-                'title': title,
-                'description': description,
-                'case_type': case_type,
-                'court_name': court_name,
-                'case_number': case_number,
-                'status': status,
-                'start_date': datetime.strptime(start_date, '%Y-%m-%d') if start_date else None,
-                'end_date': datetime.strptime(end_date, '%Y-%m-%d') if end_date else None,
-                'priority': priority,
-                'created_at': datetime.utcnow(),
-                'updated_at': datetime.utcnow()
-            }
-            
-            logger.debug("Inserting case into database")
-            # Insert case into MongoDB
-            result = cases_collection.insert_one(case)
-            case_id = result.inserted_id
-            logger.debug(f"Case created with ID: {case_id}")
-            
-            # Handle uploaded documents
-            uploaded_docs = request.form.get('uploaded_documents')
-            if uploaded_docs:
-                logger.debug("Processing uploaded documents")
-                try:
-                    doc_ids = json.loads(uploaded_docs)
-                    logger.debug(f"Found {len(doc_ids)} documents to associate with case")
-                    # Update documents with case_id
-                    for doc in doc_ids:
-                        documents_collection.update_one(
-                            {'_id': ObjectId(doc['id'])},
-                            {'$set': {'case_id': case_id}}
-                        )
-                    logger.debug("Documents successfully associated with case")
-                except json.JSONDecodeError as e:
-                    logger.error(f"Error parsing uploaded documents JSON: {str(e)}")
-            
-            return jsonify({'success': True, 'case_id': str(case_id)})
-        except Exception as e:
-            logger.error(f"Error adding case: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+    if request.method == 'GET':
+        clients = Client.get_all()
+        selected_client_id = request.args.get('client_id')
+        return render_template('add_case.html', clients=clients, selected_client_id=selected_client_id)
     
-    logger.debug("Rendering add case form")
-    return render_template('add_case.html')
+    try:
+        # Log the incoming request data
+        logger.debug("Request form data: %s", request.form)
+        logger.debug("Request files: %s", request.files)
+        
+        # Get form data
+        case_data = {
+            'client_id': request.form.get('client_id'),
+            'title': request.form.get('title', ''),
+            'description': request.form.get('description', ''),
+            'case_type': request.form.get('case_type'),
+            'court_name': request.form.get('court_name', ''),
+            'case_number': request.form.get('case_number'),
+            'status': request.form.get('status'),
+            'start_date': request.form.get('start_date'),
+            'end_date': request.form.get('end_date') if request.form.get('end_date') else None,
+            'priority': request.form.get('priority'),
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+        
+        # Validate required fields
+        required_fields = ['client_id', 'title', 'case_type', 'case_number', 'status', 'start_date', 'priority']
+        missing_fields = [field for field in required_fields if not case_data.get(field)]
+        if missing_fields:
+            flash(f'Missing required fields: {", ".join(missing_fields)}', 'error')
+            return redirect(url_for('add_case_page'))
+        
+        # Get client data using client_id (UUID)
+        client = Client.get_by_id(case_data['client_id'])
+        if not client:
+            flash('Client not found', 'error')
+            return redirect(url_for('add_case_page'))
+            
+        # Add client name to case data
+        client_data = client.to_dict()
+        case_data['client_name'] = f"{client_data['first_name']} {client_data['last_name']}"
+        
+        # Create case using the Case model
+        case = Case(**case_data)
+        case.save()
+        
+        flash('Case added successfully!', 'success')
+        return redirect(url_for('cases'))
+        
+    except Exception as e:
+        logger.error(f"Error adding case: {str(e)}")
+        logger.error(f"Stack trace: {traceback.format_exc()}")
+        flash(f'Error adding case: {str(e)}', 'error')
+        return redirect(url_for('add_case_page'))
 
 @app.route('/case/<case_id>')
 @login_required
@@ -2865,9 +2930,13 @@ def get_case(case_id):
         if not case:
             return jsonify({'error': 'Case not found'}), 404
             
-        # Get client information
-        client = Client.get_by_id(case['client_id'])
-        case['client_name'] = f"{client['first_name']} {client['last_name']}" if client else 'Unknown Client'
+        # Get client information using client_id (UUID)
+        client = Client.get_by_id(case.get('client_id'))
+        if client:
+            client_data = client.to_dict()
+            case['client_name'] = f"{client_data['first_name']} {client_data['last_name']}"
+        else:
+            case['client_name'] = 'Unknown Client'
         
         # Format dates
         if 'start_date' in case:
@@ -2878,12 +2947,11 @@ def get_case(case_id):
         # Convert ObjectId to string for JSON serialization
         if '_id' in case and isinstance(case['_id'], ObjectId):
             case['_id'] = str(case['_id'])
-        if 'client_id' in case and isinstance(case['client_id'], ObjectId):
-            case['client_id'] = str(case['client_id'])
             
         return jsonify(case)
     except Exception as e:
         logger.error(f"Error fetching case: {str(e)}")
+        logger.error(f"Stack trace: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 400
 
 @app.route('/case/<case_id>', methods=['PUT'])
@@ -2925,8 +2993,10 @@ def update_case(case_id):
                 logger.error(f"Error updating case: {str(e)}")
                 return jsonify({'error': str(e)}), 500
 
+        # Get all clients for the dropdown
+        clients = Client.get_all()
         logger.debug("Rendering edit case form")
-        return render_template('edit_case.html', case=case)
+        return render_template('edit_case.html', case=case, clients=clients)
     except Exception as e:
         logger.error(f"Error in edit case route: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -3207,8 +3277,10 @@ def edit_case(case_id):
                 logger.error(f"Error updating case: {str(e)}")
                 return jsonify({'error': str(e)}), 500
 
+        # Get all clients for the dropdown
+        clients = Client.get_all()
         logger.debug("Rendering edit case form")
-        return render_template('edit_case.html', case=case)
+        return render_template('edit_case.html', case=case, clients=clients)
     except Exception as e:
         logger.error(f"Error in edit case route: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -3430,60 +3502,6 @@ def delete_temp_document(document_id):
         return jsonify({'message': 'Document deleted successfully'})
     except Exception as e:
         app.logger.error(f"Error deleting document: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/cases/add', methods=['POST'])
-def add_case():
-    try:
-        # Get form data
-        client_id = request.form.get('client_id')
-        title = request.form.get('title')
-        description = request.form.get('description')
-        case_type = request.form.get('case_type')
-        court_name = request.form.get('court_name')
-        case_number = request.form.get('case_number')
-        status = request.form.get('status')
-        start_date = request.form.get('start_date')
-        end_date = request.form.get('end_date')
-        priority = request.form.get('priority')
-        
-        # Create case document
-        case = {
-            'client_id': ObjectId(client_id),
-            'title': title,
-            'description': description,
-            'case_type': case_type,
-            'court_name': court_name,
-            'case_number': case_number,
-            'status': status,
-            'start_date': datetime.strptime(start_date, '%Y-%m-%d') if start_date else None,
-            'end_date': datetime.strptime(end_date, '%Y-%m-%d') if end_date else None,
-            'priority': priority,
-            'created_at': datetime.utcnow(),
-            'updated_at': datetime.utcnow()
-        }
-        
-        # Insert case into MongoDB
-        result = cases_collection.insert_one(case)
-        case_id = result.inserted_id
-        
-        # Handle uploaded documents
-        uploaded_docs = request.form.get('uploaded_documents')
-        if uploaded_docs:
-            try:
-                doc_ids = json.loads(uploaded_docs)
-                # Update documents with case_id
-                for doc in doc_ids:
-                    documents_collection.update_one(
-                        {'_id': ObjectId(doc['id'])},
-                        {'$set': {'case_id': case_id}}
-                    )
-            except json.JSONDecodeError:
-                app.logger.error("Error parsing uploaded documents JSON")
-        
-        return jsonify({'success': True, 'case_id': str(case_id)})
-    except Exception as e:
-        app.logger.error(f"Error adding case: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/case/documents/temp_upload', methods=['POST'])

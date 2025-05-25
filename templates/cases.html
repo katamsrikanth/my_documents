@@ -54,7 +54,7 @@
 </div>
 
 <!-- View Case Modal -->
-<div class="modal fade" id="viewCaseModal" tabindex="-1" aria-labelledby="viewCaseModalLabel" aria-hidden="true">
+<div class="modal fade" id="viewCaseModal" tabindex="-1" aria-labelledby="viewCaseModalLabel">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -112,7 +112,7 @@
 </div>
 
 <!-- Add Case Modal -->
-<div class="modal fade" id="addCaseModal" tabindex="-1" aria-labelledby="addCaseModalLabel" aria-hidden="true">
+<div class="modal fade" id="addCaseModal" tabindex="-1" aria-labelledby="addCaseModalLabel">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -184,40 +184,6 @@
                             <option value="Low">Low</option>
                         </select>
                     </div>
-
-                    <!-- Document Upload Section -->
-                    <div class="card mt-4">
-                        <div class="card-header">
-                            <h5 class="mb-0">Documents</h5>
-                        </div>
-                        <div class="card-body">
-                            <!-- Document List -->
-                            <div id="documentList" class="mb-4">
-                                <h6>Uploaded Documents</h6>
-                                <div class="list-group" id="uploadedDocuments">
-                                    <!-- Uploaded documents will be listed here -->
-                                </div>
-                            </div>
-
-                            <!-- Document Upload Form -->
-                            <div class="card">
-                                <div class="card-body">
-                                    <h6>Upload New Document</h6>
-                                    <div class="mb-3">
-                                        <label for="documents" class="form-label">Select File</label>
-                                        <input type="file" class="form-control" id="documents" name="documents" multiple>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="documentDescription" class="form-label">Description</label>
-                                        <textarea class="form-control" id="documentDescription" name="documentDescription" rows="2"></textarea>
-                                    </div>
-                                    <button type="button" class="btn btn-primary" id="uploadDocuments">
-                                        <i class="fas fa-upload me-2"></i>Upload Documents
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -243,6 +209,23 @@ $(document).ready(function() {
 
     // Debug log to check if view-case buttons exist
     console.log('Number of view-case buttons:', $('.view-case').length);
+
+    // Store the last focused element before opening modal
+    let lastFocusedElement = null;
+
+    // Handle modal show/hide events
+    $('.modal').on('show.bs.modal', function() {
+        lastFocusedElement = document.activeElement;
+        // Remove inert attribute when modal is shown
+        $(this).removeAttr('inert');
+    }).on('hide.bs.modal', function() {
+        // Add inert attribute when modal is hidden
+        $(this).attr('inert', '');
+        // Restore focus to the last focused element
+        if (lastFocusedElement) {
+            lastFocusedElement.focus();
+        }
+    });
 
     // View case details - using event delegation
     $(document).on('click', '.view-case', function(e) {
@@ -278,13 +261,50 @@ $(document).ready(function() {
                 $('#viewPriority').text(caseData.priority || 'N/A');
                 $('#viewDescription').text(caseData.description || 'No description available');
                 
-                // Update documents section
+                // Update documents section - show only latest versions
                 if (caseData.documents && caseData.documents.length > 0) {
-                    var documentsHtml = caseData.documents.map(doc => `
-                        <a href="/document/${doc._id}" class="list-group-item list-group-item-action">
-                            <i class="fas fa-file"></i> ${doc.original_filename}
-                        </a>
-                    `).join('');
+                    // Group documents by original filename and keep only latest versions
+                    const latestVersions = {};
+                    caseData.documents.forEach(doc => {
+                        const filename = doc.original_filename;
+                        if (!latestVersions[filename] || 
+                            (doc.version && latestVersions[filename].version && 
+                             doc.version > latestVersions[filename].version)) {
+                            latestVersions[filename] = doc;
+                        }
+                    });
+
+                    // Create HTML for latest versions
+                    const documentsHtml = Object.values(latestVersions).map(doc => {
+                        // Format date safely
+                        let formattedDate = '';
+                        try {
+                            if (doc.upload_date) {
+                                const date = new Date(doc.upload_date);
+                                if (!isNaN(date.getTime())) {
+                                    formattedDate = date.toLocaleDateString();
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Error formatting date:', e);
+                        }
+
+                        return `
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <i class="fas fa-file me-2"></i>
+                                        <a href="/document/${doc._id}/download" class="text-decoration-none">
+                                            ${doc.original_filename}
+                                        </a>
+                                        ${doc.description ? `<div class="text-muted small">${doc.description}</div>` : ''}
+                                    </div>
+                                    ${formattedDate ? `<div class="text-muted small">${formattedDate}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
                     $('#viewDocuments').html(documentsHtml);
                 } else {
                     $('#viewDocuments').html('<p class="text-muted">No documents attached</p>');
@@ -333,116 +353,27 @@ $(document).ready(function() {
         }
     });
 
-    // Handle document uploads
-    $('#uploadDocuments').click(function() {
-        uploadDocuments();
-    });
-
-    function uploadDocuments() {
-        const fileInput = document.getElementById('documents');
-        const files = fileInput.files;
-        const description = document.getElementById('documentDescription').value;
+    // Handle Add Case form submission
+    $('#saveCase').on('click', function() {
+        var formData = new FormData($('#addCaseForm')[0]);
         
-        if (files.length === 0) {
-            showError('Please select at least one file to upload');
+        // Validate required fields
+        var requiredFields = ['client_id', 'title', 'case_type', 'case_number', 'status', 'start_date', 'priority'];
+        var missingFields = [];
+        
+        requiredFields.forEach(function(field) {
+            if (!formData.get(field)) {
+                missingFields.push(field.replace('_', ' '));
+            }
+        });
+        
+        if (missingFields.length > 0) {
+            alert('Please fill in all required fields: ' + missingFields.join(', '));
             return;
         }
         
-        const formData = new FormData();
-        for (let i = 0; i < files.length; i++) {
-            formData.append('files', files[i]);
-        }
-        formData.append('description', description);
-        
         // Show loading state
-        const uploadButton = document.getElementById('uploadDocuments');
-        const originalText = uploadButton.innerHTML;
-        uploadButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-        uploadButton.disabled = true;
-        
-        fetch('/case/documents/temp_upload', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                throw new Error(data.error);
-            }
-            
-            // Add uploaded documents to the list
-            data.documents.forEach(doc => {
-                addDocumentToList(doc);
-            });
-            
-            // Clear the form
-            fileInput.value = '';
-            document.getElementById('documentDescription').value = '';
-            
-            showSuccess('Documents uploaded successfully');
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showError(error.message || 'Failed to upload documents');
-        })
-        .finally(() => {
-            // Reset button state
-            uploadButton.innerHTML = originalText;
-            uploadButton.disabled = false;
-        });
-    }
-
-    function addDocumentToList(doc) {
-        var docHtml = `
-            <div class="list-group-item d-flex justify-content-between align-items-center" data-document-id="${doc._id}">
-                <div>
-                    <i class="fas fa-file me-2"></i>
-                    <span class="document-name">${doc.original_filename}</span>
-                    <small class="text-muted ms-2">v${doc.version || 1}</small>
-                    <div class="text-muted small document-description">${doc.description || ''}</div>
-                </div>
-                <div>
-                    <button type="button" class="btn btn-sm btn-danger delete-document" data-document-id="${doc._id}">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-        `;
-        $('#uploadedDocuments').append(docHtml);
-    }
-
-    // Handle document deletion
-    $(document).on('click', '.delete-document', function() {
-        var documentId = $(this).data('document-id');
-        var listItem = $(this).closest('.list-group-item');
-        
-        $.ajax({
-            url: `/case/documents/${documentId}`,
-            method: 'DELETE',
-            success: function(response) {
-                listItem.remove();
-                showSuccess('Document deleted successfully');
-            },
-            error: function(xhr) {
-                showError('Error deleting document: ' + (xhr.responseJSON?.error || 'Unknown error'));
-            }
-        });
-    });
-
-    // Save case with uploaded documents
-    $('#saveCase').click(function() {
-        var formData = new FormData($('#addCaseForm')[0]);
-        
-        // Add uploaded documents to formData
-        var uploadedDocs = [];
-        $('#uploadedDocuments .list-group-item').each(function() {
-            uploadedDocs.push({
-                id: $(this).data('document-id'),
-                name: $(this).find('.document-name').text(),
-                description: $(this).find('.document-description').text()
-            });
-        });
-        formData.append('uploaded_documents', JSON.stringify(uploadedDocs));
+        $('#saveCase').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Saving...');
         
         $.ajax({
             url: '/cases/add',
@@ -451,29 +382,22 @@ $(document).ready(function() {
             processData: false,
             contentType: false,
             success: function(response) {
-                if (response.success) {
-                    showSuccess('Case created successfully');
-                    location.reload();
+                if (response.message) {
+                    var addModal = bootstrap.Modal.getInstance(document.getElementById('addCaseModal'));
+                    addModal.hide();
+                    location.reload(); // Refresh the page to show the new case
                 } else {
-                    showError('Error saving case: ' + response.error);
+                    alert('Error adding case: ' + (response.error || 'Unknown error'));
                 }
             },
             error: function(xhr) {
-                showError('Error saving case: ' + (xhr.responseJSON?.error || 'Unknown error'));
+                alert('Error adding case: ' + (xhr.responseJSON?.error || 'Unknown error'));
+            },
+            complete: function() {
+                $('#saveCase').prop('disabled', false).html('Save Case');
             }
         });
     });
-
-    // Helper functions for showing messages
-    function showSuccess(message) {
-        // You can implement this using your preferred notification system
-        alert(message); // Replace with better UI notification
-    }
-
-    function showError(message) {
-        // You can implement this using your preferred notification system
-        alert(message); // Replace with better UI notification
-    }
 });
 
 function getStatusColor(status) {

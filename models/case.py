@@ -11,11 +11,12 @@ import json
 class Case:
     def __init__(self, **kwargs):
         self._id = kwargs.get('_id')
-        self.client_id = kwargs.get('client_id')  # This will be the client's UUID string
-        self.title = kwargs.get('title', '')
-        self.description = kwargs.get('description', '')
+        self.client_id = kwargs.get('client_id')  # Store as UUID string
+        self.client_name = kwargs.get('client_name')
+        self.title = kwargs.get('title')
+        self.description = kwargs.get('description')
         self.case_type = kwargs.get('case_type')
-        self.court_name = kwargs.get('court_name', '')
+        self.court_name = kwargs.get('court_name')
         self.case_number = kwargs.get('case_number')
         self.status = kwargs.get('status')
         # Convert string dates to datetime objects
@@ -34,8 +35,8 @@ class Case:
         self.priority = kwargs.get('priority')
         self.assigned_attorney_id = kwargs.get('assigned_attorney_id')
         self.documents = kwargs.get('documents', [])  # List of document metadata
-        self.created_at = kwargs.get('created_at', datetime.now())
-        self.updated_at = kwargs.get('updated_at', datetime.now())
+        self.created_at = kwargs.get('created_at', datetime.utcnow())
+        self.updated_at = kwargs.get('updated_at', datetime.utcnow())
 
     @staticmethod
     def create_collection():
@@ -56,6 +57,10 @@ class Case:
             save_data['start_date'] = save_data['start_date'].strftime('%Y-%m-%d')
         if isinstance(save_data.get('end_date'), datetime):
             save_data['end_date'] = save_data['end_date'].strftime('%Y-%m-%d')
+        
+        # Remove _id from save_data if it's None to let MongoDB generate it
+        if save_data.get('_id') is None:
+            save_data.pop('_id', None)
         
         if self._id:
             self.updated_at = datetime.now()
@@ -137,7 +142,7 @@ class Case:
     @staticmethod
     def get_by_client_id(client_id):
         collection = Case.get_collection()
-        cases = list(collection.find({'client_id': client_id}))  # Using client_id directly
+        cases = list(collection.find({'client_id': client_id}))  # Using client_id directly as UUID string
         for case in cases:
             case['_id'] = str(case['_id'])
         return cases
