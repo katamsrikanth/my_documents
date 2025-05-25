@@ -83,66 +83,97 @@
                 return;
             }
             
+            // Create highlighted document text
+            let highlightedText = data.document_text;
+            const highlights = data.highlights.sort((a, b) => b.start - a.start); // Sort in reverse to maintain indices
+            
+            // Apply highlights
+            highlights.forEach(highlight => {
+                const before = highlightedText.substring(0, highlight.start);
+                const after = highlightedText.substring(highlight.end);
+                highlightedText = `${before}<mark class="highlight" data-bs-toggle="tooltip" title="${highlight.suggestion}">${highlight.text}</mark>${after}`;
+            });
+            
             let html = `
                 <div class="card review-card">
-                    <div class="card-header bg-primary text-white">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                         <h5 class="card-title mb-0">Document Review Results</h5>
+                        <button class="btn btn-light btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#analysisPanel">
+                            <i class="fas fa-chevron-down"></i> Show Analysis
+                        </button>
                     </div>
                     <div class="card-body">
-                        <div class="review-section">
-                            <h6 class="section-title">
-                                <i class="fas fa-file-alt me-2"></i>Document Analysis
-                            </h6>
-                            <div class="analysis-content">
-                                ${formatAnalysis(data.analysis)}
+                        <div class="document-container mb-4">
+                            <div class="document-text">
+                                ${highlightedText}
                             </div>
                         </div>
                         
-                        <div class="review-section">
-                            <h6 class="section-title">
-                                <i class="fas fa-check-circle me-2"></i>Compliance Check
-                            </h6>
-                            <div class="compliance-content">
-                                ${data.compliance}
+                        <div class="collapse" id="analysisPanel">
+                            <div class="review-section">
+                                <h6 class="section-title">
+                                    <i class="fas fa-file-alt me-2"></i>Document Analysis
+                                </h6>
+                                <div class="analysis-content">
+                                    ${formatAnalysis(data.analysis)}
+                                </div>
                             </div>
-                        </div>
-                        
-                        <div class="review-section">
-                            <h6 class="section-title">
-                                <i class="fas fa-lightbulb me-2"></i>Suggestions
-                            </h6>
-                            <ul class="suggestions-list">
-                                ${data.suggestions.map(suggestion => `
-                                    <li class="suggestion-item">
-                                        <i class="fas fa-arrow-right me-2"></i>${suggestion}
-                                    </li>
-                                `).join('')}
-                            </ul>
-                        </div>
-                        
-                        <div class="review-section">
-                            <h6 class="section-title">
-                                <i class="fas fa-star me-2"></i>Recommendations
-                            </h6>
-                            <div class="recommendations-content">
-                                ${data.recommendations}
+                            
+                            <div class="review-section">
+                                <h6 class="section-title">
+                                    <i class="fas fa-check-circle me-2"></i>Compliance Check
+                                </h6>
+                                <div class="compliance-content">
+                                    ${data.compliance}
+                                </div>
                             </div>
-                        </div>
-                        
-                        <div class="review-section">
-                            <h6 class="section-title">
-                                <i class="fas fa-book me-2"></i>Reference Documents
-                            </h6>
-                            <div class="reference-documents">
-                                ${data.reference_documents.map(doc => `
-                                    <span class="badge bg-info me-2 mb-2">${doc}</span>
-                                `).join('')}
+                            
+                            <div class="review-section">
+                                <h6 class="section-title">
+                                    <i class="fas fa-lightbulb me-2"></i>Suggestions
+                                </h6>
+                                <ul class="suggestions-list">
+                                    ${data.suggestions.map(suggestion => `
+                                        <li class="suggestion-item">
+                                            <i class="fas fa-arrow-right me-2"></i>${suggestion}
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+                            
+                            <div class="review-section">
+                                <h6 class="section-title">
+                                    <i class="fas fa-star me-2"></i>Recommendations
+                                </h6>
+                                <div class="recommendations-content">
+                                    ${data.recommendations}
+                                </div>
+                            </div>
+                            
+                            <div class="review-section">
+                                <h6 class="section-title">
+                                    <i class="fas fa-book me-2"></i>Reference Documents
+                                </h6>
+                                <div class="reference-documents">
+                                    ${data.reference_documents.map(doc => `
+                                        <span class="badge bg-info me-2 mb-2">${doc}</span>
+                                    `).join('')}
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             `;
             resultsDiv.innerHTML = html;
+            
+            // Initialize tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl, {
+                    placement: 'top',
+                    trigger: 'hover'
+                });
+            });
         })
         .catch(error => {
             document.getElementById('reviewResults').innerHTML = 
@@ -171,6 +202,29 @@
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         border: none;
         margin-bottom: 2rem;
+    }
+
+    .document-container {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 2rem;
+        max-height: 600px;
+        overflow-y: auto;
+    }
+
+    .document-text {
+        font-family: 'Times New Roman', Times, serif;
+        font-size: 1.1rem;
+        line-height: 1.8;
+        white-space: pre-wrap;
+    }
+
+    .highlight {
+        background-color: #fff3cd;
+        padding: 2px 0;
+        border-radius: 2px;
+        cursor: help;
     }
 
     .review-section {
@@ -232,6 +286,25 @@
 
     .compliance-content {
         line-height: 1.6;
+    }
+
+    /* Custom scrollbar for document container */
+    .document-container::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .document-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+    }
+
+    .document-container::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 4px;
+    }
+
+    .document-container::-webkit-scrollbar-thumb:hover {
+        background: #555;
     }
 </style>
 {% endblock %} 

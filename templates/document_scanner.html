@@ -1,51 +1,285 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2 class="mb-4">Document Scanner</h2>
-    
-    <div class="card">
-        <div class="card-body">
-            <form id="documentScannerForm" enctype="multipart/form-data">
-                <div class="mb-3">
-                    <label for="documentFile" class="form-label">Upload Document</label>
-                    <input type="file" class="form-control" id="documentFile" name="document" accept=".pdf,.doc,.docx" required>
-                    <div class="form-text">Supported formats: PDF, DOC, DOCX</div>
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-4">Document Scanner</h2>
+            
+            <div class="card">
+                <div class="card-body">
+                    <form id="documentScannerForm" enctype="multipart/form-data">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="documentFile" class="form-label">Upload Document</label>
+                                    <input type="file" class="form-control" id="documentFile" name="document" accept=".pdf,.doc,.docx" required>
+                                    <div class="form-text">Supported formats: PDF, DOC, DOCX</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="documentType" class="form-label">Document Type</label>
+                                    <select class="form-select" id="documentType" name="document_type" required>
+                                        <option value="">Select document type</option>
+                                        <option value="contract">Contract</option>
+                                        <option value="application">Application Form</option>
+                                        <option value="agreement">Agreement</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                            Scan Document
+                        </button>
+                    </form>
                 </div>
-                
-                <div class="mb-3">
-                    <label for="documentType" class="form-label">Document Type</label>
-                    <select class="form-select" id="documentType" name="document_type" required>
-                        <option value="">Select document type</option>
-                        <option value="contract">Contract</option>
-                        <option value="application">Application Form</option>
-                        <option value="agreement">Agreement</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                
-                <button type="submit" class="btn btn-primary">
-                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                    Scan Document
-                </button>
-            </form>
+            </div>
         </div>
     </div>
 
-    <div id="scanResults" class="mt-4" style="display: none;">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Scan Results</h5>
+    <div id="scanResults" class="row" style="display: none;">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Document Preview</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-primary btn-sm active" data-view="document">
+                            <i class="fas fa-file-alt"></i> Document View
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" data-view="fields">
+                            <i class="fas fa-list"></i> Field View
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="documentPreview" class="document-container">
+                        <div class="document-text"></div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <div id="scanStatus" class="mb-3"></div>
-                <div id="aiAnalysis" class="mb-3"></div>
-                <div id="missingFields" class="mb-3"></div>
-                <div id="improperFields" class="mb-3"></div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Analysis Panel</h5>
+                    <button class="btn btn-link btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#analysisPanel">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="scanStatus" class="mb-3"></div>
+                    
+                    <div class="collapse show" id="analysisPanel">
+                        <div id="aiAnalysis" class="mb-3"></div>
+                        
+                        <div class="analysis-section mb-3">
+                            <h6 class="section-title">
+                                <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                                Missing Fields
+                            </h6>
+                            <div id="missingFields" class="analysis-content"></div>
+                        </div>
+                        
+                        <div class="analysis-section mb-3">
+                            <h6 class="section-title">
+                                <i class="fas fa-exclamation-circle text-warning me-2"></i>
+                                Improper Fields
+                            </h6>
+                            <div id="improperFields" class="analysis-content"></div>
+                        </div>
+                        
+                        <div class="analysis-section">
+                            <h6 class="section-title">
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                                Filled Fields
+                            </h6>
+                            <div id="filledFields" class="analysis-content"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+.document-container {
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 2rem;
+    max-height: 800px;
+    overflow-y: auto;
+    position: relative;
+}
+
+.document-text {
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 1.1rem;
+    line-height: 1.8;
+    white-space: pre-wrap;
+}
+
+.highlight {
+    padding: 2px 0;
+    border-radius: 2px;
+    cursor: help;
+    position: relative;
+    display: inline-block;
+}
+
+.highlight.missing {
+    background-color: #fff3cd;
+    border-bottom: 2px dashed #f0ad4e;
+}
+
+.highlight.improper {
+    background-color: #f8d7da;
+    border-bottom: 2px dashed #dc3545;
+}
+
+.highlight.filled {
+    background-color: #d4edda;
+    border-bottom: 2px dashed #28a745;
+}
+
+.analysis-section {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.section-title {
+    color: #495057;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.analysis-content {
+    line-height: 1.6;
+}
+
+.list-group-item {
+    border-left: none;
+    border-right: none;
+    transition: background-color 0.2s;
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa;
+}
+
+.list-group-item:first-child {
+    border-top: none;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+.field-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-right: 0.5rem;
+}
+
+.field-tag.missing {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.field-tag.improper {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.field-tag.filled {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.scroll-to-field {
+    color: #6c757d;
+    cursor: pointer;
+    margin-left: auto;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.scroll-to-field:hover {
+    background-color: #e9ecef;
+    color: #495057;
+}
+
+/* Custom scrollbar for document container */
+.document-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.document-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.document-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.document-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Tooltip customization */
+.tooltip {
+    font-size: 0.9rem;
+}
+
+.tooltip-inner {
+    max-width: 300px;
+    padding: 0.5rem 1rem;
+    background-color: #495057;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Filter buttons */
+.filter-buttons {
+    margin-bottom: 1rem;
+}
+
+.filter-buttons .btn {
+    margin-right: 0.5rem;
+}
+
+.filter-buttons .btn.active {
+    background-color: #007bff;
+    color: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .document-container {
+        max-height: 500px;
+    }
+    
+    .analysis-section {
+        margin-top: 1rem;
+    }
+}
+</style>
 
 <script>
 document.getElementById('documentScannerForm').addEventListener('submit', async (e) => {
@@ -69,51 +303,212 @@ document.getElementById('documentScannerForm').addEventListener('submit', async 
         
         const result = await response.json();
         
-        document.getElementById('scanResults').style.display = 'block';
+        document.getElementById('scanResults').style.display = 'flex';
         document.getElementById('scanStatus').innerHTML = `
             <div class="alert ${result.status === 'complete' ? 'alert-success' : 'alert-warning'}">
                 ${result.message}
             </div>
         `;
         
+        // Display document text with highlights
+        let documentText = result.document_text;
+        const highlights = [];
+        
+        // Add missing fields highlights
+        result.missing_fields.forEach(field => {
+            if (field.start !== undefined && field.end !== undefined) {
+                highlights.push({
+                    start: field.start,
+                    end: field.end,
+                    type: 'missing',
+                    text: documentText.substring(field.start, field.end),
+                    reason: field.description || `Missing field: ${field.name}`
+                });
+            }
+        });
+        
+        // Add improper fields highlights
+        result.improper_fields.forEach(field => {
+            if (field.start !== undefined && field.end !== undefined) {
+                highlights.push({
+                    start: field.start,
+                    end: field.end,
+                    type: 'improper',
+                    text: documentText.substring(field.start, field.end),
+                    reason: field.reason
+                });
+            }
+        });
+        
+        // Add filled fields highlights
+        result.filled_fields.forEach(field => {
+            if (field.start !== undefined && field.end !== undefined) {
+                highlights.push({
+                    start: field.start,
+                    end: field.end,
+                    type: 'filled',
+                    text: field.value,
+                    reason: `Field "${field.name}" is filled`
+                });
+            }
+        });
+        
+        // Sort highlights by start position (reverse order to maintain indices)
+        highlights.sort((a, b) => b.start - a.start);
+        
+        // Apply highlights
+        highlights.forEach(highlight => {
+            const before = documentText.substring(0, highlight.start);
+            const after = documentText.substring(highlight.end);
+            documentText = `${before}<mark class="highlight ${highlight.type}" data-bs-toggle="tooltip" title="${highlight.reason}" data-field-id="${highlight.type}-${highlight.start}">${highlight.text}</mark>${after}`;
+        });
+        
+        document.querySelector('.document-text').innerHTML = documentText;
+        
+        // Initialize tooltips
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl, {
+                placement: 'top',
+                trigger: 'hover'
+            });
+        });
+        
         // Display AI analysis
         if (result.analysis) {
             document.getElementById('aiAnalysis').innerHTML = `
-                <div class="card mb-3">
-                    <div class="card-header">
-                        <h6 class="mb-0">AI Analysis</h6>
-                    </div>
-                    <div class="card-body">
+                <div class="analysis-section mb-3">
+                    <h6 class="section-title">
+                        <i class="fas fa-robot me-2"></i>
+                        AI Analysis
+                    </h6>
+                    <div class="analysis-content">
                         <p class="mb-0">${result.analysis}</p>
                     </div>
                 </div>
             `;
         }
         
+        // Display missing fields
         if (result.missing_fields && result.missing_fields.length > 0) {
             document.getElementById('missingFields').innerHTML = `
-                <h6>Missing Mandatory Fields:</h6>
                 <ul class="list-group">
                     ${result.missing_fields.map(field => `
-                        <li class="list-group-item list-group-item-danger">${field}</li>
-                    `).join('')}
-                </ul>
-            `;
-        }
-        
-        if (result.improper_fields && result.improper_fields.length > 0) {
-            document.getElementById('improperFields').innerHTML = `
-                <h6>Improperly Filled Fields:</h6>
-                <ul class="list-group">
-                    ${result.improper_fields.map(field => `
                         <li class="list-group-item list-group-item-warning">
-                            <strong>${field.field || field}</strong>
-                            ${field.reason ? `<br><small class="text-muted">${field.reason}</small>` : ''}
+                            <div class="d-flex align-items-center">
+                                <span class="field-tag missing">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>
+                                    Missing
+                                </span>
+                                <div class="flex-grow-1">
+                                    <strong>${field.name}</strong>
+                                    ${field.description ? `<br><small class="text-muted">${field.description}</small>` : ''}
+                                </div>
+                                ${field.start !== undefined ? `
+                                    <button class="scroll-to-field" onclick="scrollToField('missing-${field.start}')">
+                                        <i class="fas fa-arrow-right"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
                         </li>
                     `).join('')}
                 </ul>
             `;
         }
+        
+        // Display improper fields
+        if (result.improper_fields && result.improper_fields.length > 0) {
+            document.getElementById('improperFields').innerHTML = `
+                <ul class="list-group">
+                    ${result.improper_fields.map(field => `
+                        <li class="list-group-item list-group-item-danger">
+                            <div class="d-flex align-items-center">
+                                <span class="field-tag improper">
+                                    <i class="fas fa-exclamation-circle me-1"></i>
+                                    Improper
+                                </span>
+                                <div class="flex-grow-1">
+                                    <strong>${field.field}</strong>
+                                    ${field.reason ? `<br><small class="text-muted">${field.reason}</small>` : ''}
+                                </div>
+                                ${field.start !== undefined ? `
+                                    <button class="scroll-to-field" onclick="scrollToField('improper-${field.start}')">
+                                        <i class="fas fa-arrow-right"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+        
+        // Display filled fields
+        if (result.filled_fields && result.filled_fields.length > 0) {
+            document.getElementById('filledFields').innerHTML = `
+                <ul class="list-group">
+                    ${result.filled_fields.map(field => `
+                        <li class="list-group-item list-group-item-success">
+                            <div class="d-flex align-items-center">
+                                <span class="field-tag filled">
+                                    <i class="fas fa-check-circle me-1"></i>
+                                    Filled
+                                </span>
+                                <div class="flex-grow-1">
+                                    <strong>${field.name}</strong>
+                                    ${field.value ? `<br><small class="text-muted">${field.value}</small>` : ''}
+                                </div>
+                                ${field.start !== undefined ? `
+                                    <button class="scroll-to-field" onclick="scrollToField('filled-${field.start}')">
+                                        <i class="fas fa-arrow-right"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+        
+        // Add filter buttons
+        const filterButtons = document.createElement('div');
+        filterButtons.className = 'filter-buttons';
+        filterButtons.innerHTML = `
+            <button class="btn btn-outline-warning active" data-filter="all">All Fields</button>
+            <button class="btn btn-outline-warning" data-filter="missing">Missing Fields</button>
+            <button class="btn btn-outline-danger" data-filter="improper">Improper Fields</button>
+            <button class="btn btn-outline-success" data-filter="filled">Filled Fields</button>
+        `;
+        document.querySelector('.card-header').appendChild(filterButtons);
+        
+        // Handle filter buttons
+        document.querySelectorAll('.filter-buttons .btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const filter = this.dataset.filter;
+                document.querySelectorAll('.filter-buttons .btn').forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Show/hide highlights based on filter
+                document.querySelectorAll('.highlight').forEach(highlight => {
+                    if (filter === 'all' || highlight.classList.contains(filter)) {
+                        highlight.style.display = 'inline';
+                    } else {
+                        highlight.style.display = 'none';
+                    }
+                });
+                
+                // Show/hide analysis items based on filter
+                document.querySelectorAll('.analysis-section').forEach(section => {
+                    const type = section.id.replace('Fields', '').toLowerCase();
+                    if (filter === 'all' || type === filter) {
+                        section.style.display = 'block';
+                    } else {
+                        section.style.display = 'none';
+                    }
+                });
+            });
+        });
+        
     } catch (error) {
         console.error('Error:', error);
         document.getElementById('scanResults').style.display = 'block';
@@ -128,5 +523,25 @@ document.getElementById('documentScannerForm').addEventListener('submit', async 
         submitButton.disabled = false;
     }
 });
+
+// Function to scroll to a highlighted field
+function scrollToField(fieldId) {
+    const field = document.querySelector(`[data-field-id="${fieldId}"]`);
+    if (field) {
+        field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        field.style.animation = 'highlight-pulse 2s';
+    }
+}
+
+// Add highlight pulse animation
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes highlight-pulse {
+        0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+    }
+`;
+document.head.appendChild(style);
 </script>
 {% endblock %} 

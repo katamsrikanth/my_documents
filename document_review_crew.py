@@ -240,15 +240,39 @@ class DocumentReviewCrew:
             
             logger.info("Document review completed successfully")
             
+            # Process results and identify sections that need highlighting
+            highlights = []
+            suggestions = []
+            
+            # Parse the analysis to identify issues and their locations
+            analysis_lines = result.split('\n')
+            current_section = None
+            for line in analysis_lines:
+                if line.strip().startswith('**'):
+                    current_section = line.strip('*').strip()
+                elif line.strip().startswith('-') or line.strip().startswith('*'):
+                    issue = line.strip('- *').strip()
+                    if current_section:
+                        # Find the text in the document that matches this issue
+                        # This is a simplified version - you might want to use more sophisticated matching
+                        if issue.lower() in self.text.lower():
+                            start_idx = self.text.lower().find(issue.lower())
+                            if start_idx != -1:
+                                highlights.append({
+                                    'text': self.text[start_idx:start_idx + len(issue)],
+                                    'start': start_idx,
+                                    'end': start_idx + len(issue),
+                                    'suggestion': f"Review {current_section}: {issue}"
+                                })
+                                suggestions.append(f"{current_section}: {issue}")
+            
             # Process results
             return {
+                "document_text": self.text,
+                "highlights": highlights,
                 "analysis": result,
                 "compliance": "Compliance check results...",
-                "suggestions": [
-                    "Suggestion 1: Improve document structure",
-                    "Suggestion 2: Update legal terminology",
-                    "Suggestion 3: Add missing clauses"
-                ],
+                "suggestions": suggestions,
                 "recommendations": "Overall recommendations for improvement...",
                 "reference_documents": [doc["document_name"] for doc in self.relevant_docs]
             }

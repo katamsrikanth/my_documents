@@ -2242,6 +2242,7 @@ def scan_document_for_fields(document_path, document_type):
         1. Which fields are missing (not present in the document)
         2. Which fields are present and filled by the user
         3. Which fields are present but empty
+        4. The exact location (start and end indices) of each field in the document text
         
         Document Type: {document_type}
         Document Content:
@@ -2249,9 +2250,28 @@ def scan_document_for_fields(document_path, document_type):
         
         Return the analysis in this exact JSON format:
         {{
-            "missing_fields": ["list of missing field names"],
-            "filled_fields": ["list of fields that are present and filled"],
-            "empty_fields": ["list of fields that are present but empty"],
+            "missing_fields": [
+                {{
+                    "name": "field name",
+                    "description": "brief description of the field"
+                }}
+            ],
+            "filled_fields": [
+                {{
+                    "name": "field name",
+                    "value": "field value",
+                    "start": start_index,
+                    "end": end_index
+                }}
+            ],
+            "empty_fields": [
+                {{
+                    "name": "field name",
+                    "start": start_index,
+                    "end": end_index,
+                    "description": "brief description of what should be filled"
+                }}
+            ],
             "analysis": "brief explanation of the findings"
         }}
         """
@@ -2289,12 +2309,21 @@ def scan_document_for_fields(document_path, document_type):
             logger.info(f"Analysis: {analysis.get('analysis', '')}")
             
             # Convert empty fields to improper fields format
-            improper_fields = [{'field': field, 'reason': 'Field is present but empty'} 
-                             for field in analysis.get('empty_fields', [])]
+            improper_fields = [
+                {
+                    'field': field['name'],
+                    'reason': field.get('description', 'Field is present but empty'),
+                    'start': field.get('start'),
+                    'end': field.get('end')
+                }
+                for field in analysis.get('empty_fields', [])
+            ]
             
             return {
+                'document_text': text,
                 'missing_fields': analysis.get('missing_fields', []),
                 'improper_fields': improper_fields,
+                'filled_fields': analysis.get('filled_fields', []),
                 'analysis': analysis.get('analysis', ''),
                 'error': None
             }
@@ -2371,16 +2400,20 @@ def scan_document():
                 return jsonify({
                     'status': 'complete',
                     'message': 'Document scan completed successfully. All mandatory fields are properly filled.',
+                    'document_text': scan_results.get('document_text', ''),
                     'missing_fields': [],
                     'improper_fields': [],
+                    'filled_fields': scan_results.get('filled_fields', []),
                     'analysis': scan_results.get('analysis', '')
                 })
             else:
                 return jsonify({
                     'status': 'incomplete',
                     'message': 'Document scan completed. Some fields need attention.',
+                    'document_text': scan_results.get('document_text', ''),
                     'missing_fields': scan_results['missing_fields'],
                     'improper_fields': scan_results['improper_fields'],
+                    'filled_fields': scan_results.get('filled_fields', []),
                     'analysis': scan_results.get('analysis', '')
                 })
                 
@@ -3121,7 +3154,7 @@ def appointments():
             try:
                 appointment_id = appointment.get('appointment_id')
                 logger.debug(f"Processing appointment: {appointment_id}")
-                # Get case information
+        # Get case information
                 case = Case.get_by_id(appointment.get('case_id'))
                 if case:
                     case_id = case._id
