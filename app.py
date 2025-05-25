@@ -61,7 +61,7 @@ logging.getLogger('weaviate').setLevel(logging.DEBUG)
 logging.getLogger('werkzeug').setLevel(logging.DEBUG)
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key'  # Change this to a secure secret key
+app.secret_key = os.urandom(24)
 
 # Initialize MongoDB collections
 from models.user import User
@@ -71,6 +71,13 @@ cases_collection = db.cases
 documents_collection = db.documents
 appointments_collection = db.appointments
 initial_inquiries_collection = db.initial_inquiries
+
+# Add nl2br filter
+@app.template_filter('nl2br')
+def nl2br_filter(s):
+    if not s:
+        return ''
+    return s.replace('\n', '<br>')
 
 # Register cleanup function
 @atexit.register
@@ -2730,36 +2737,61 @@ def add_client():
         first_name = request.form.get('first_name')
         last_name = request.form.get('last_name')
         email = request.form.get('email')
-        phone = request.form.get('phone')
+        phone_number = request.form.get('phone_number')
+        alternate_number = request.form.get('alternate_number')
         address = request.form.get('address')
+        city = request.form.get('city')
+        state = request.form.get('state')
+        zip_code = request.form.get('zip_code')
+        country = request.form.get('country')
+        client_type = request.form.get('client_type')
+        preferred_contact = request.form.get('preferred_contact')
+
+        # Log received data for debugging
+        logger.info(f"Received client data: first_name={first_name}, last_name={last_name}, email={email}, phone={phone_number}, type={client_type}")
 
         # Validate required fields
-        if not all([first_name, last_name, email]):
-            return jsonify({'error': 'Missing required fields'}), 400
-
-        # Generate a unique client ID
-        client_id = str(uuid.uuid4())
-
-        # Create client document
-        client_data = {
-            'client_id': client_id,  # Store as string
+        required_fields = {
             'first_name': first_name,
             'last_name': last_name,
             'email': email,
-            'phone': phone,
-            'address': address,
-            'created_at': datetime.utcnow(),
-            'updated_at': datetime.utcnow()
+            'phone_number': phone_number,
+            'client_type': client_type
         }
+        
+        missing_fields = [field for field, value in required_fields.items() if not value]
+        if missing_fields:
+            logger.warning(f"Missing required fields: {', '.join(missing_fields)}")
+            return jsonify({'error': f'Missing required fields: {", ".join(missing_fields)}'}), 400
 
-        # Insert into database
-        result = clients_collection.insert_one(client_data)
-        client_data['_id'] = str(result.inserted_id)
+        # Check if email already exists
+        existing_client = User.db.clients.find_one({'email': email})
+        if existing_client:
+            return jsonify({'error': 'A client with this email address already exists'}), 400
+
+        # Create new client
+        client = Client(
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            phone_number=phone_number,
+            alternate_number=alternate_number,
+            address=address,
+            city=city,
+            state=state,
+            zip_code=zip_code,
+            country=country,
+            client_type=client_type,
+            preferred_contact=preferred_contact
+        )
+
+        # Save to database
+        client.save()
 
         return jsonify({
             'success': True,
             'message': 'Client created successfully',
-            'client': client_data
+            'client': client.to_dict()
         })
 
     except Exception as e:
@@ -2930,25 +2962,39 @@ def get_case(case_id):
         if not case:
             return jsonify({'error': 'Case not found'}), 404
             
-        # Get client information using client_id (UUID)
-        client = Client.get_by_id(case.get('client_id'))
+        # Get client information using client_id
+        client = Client.get_by_id(case.client_id)
         if client:
             client_data = client.to_dict()
-            case['client_name'] = f"{client_data['first_name']} {client_data['last_name']}"
+            case.client_name = f"{client_data['first_name']} {client_data['last_name']}"
         else:
-            case['client_name'] = 'Unknown Client'
+            case.client_name = 'Unknown Client'
+        
+        # Convert case object to dictionary
+        case_dict = {
+            '_id': case._id,
+            'client_id': case.client_id,
+            'client_name': case.client_name,
+            'title': case.title,
+            'description': case.description,
+            'case_type': case.case_type,
+            'court_name': case.court_name,
+            'case_number': case.case_number,
+            'status': case.status,
+            'priority': case.priority,
+            'documents': case.documents,
+            'court_visits': case.court_visits,
+            'created_at': case.created_at,
+            'updated_at': case.updated_at
+        }
         
         # Format dates
-        if 'start_date' in case:
-            case['start_date'] = case['start_date'].strftime('%Y-%m-%d') if case['start_date'] else None
-        if 'end_date' in case:
-            case['end_date'] = case['end_date'].strftime('%Y-%m-%d') if case['end_date'] else None
+        if case.start_date:
+            case_dict['start_date'] = case.start_date.strftime('%Y-%m-%d')
+        if case.end_date:
+            case_dict['end_date'] = case.end_date.strftime('%Y-%m-%d')
             
-        # Convert ObjectId to string for JSON serialization
-        if '_id' in case and isinstance(case['_id'], ObjectId):
-            case['_id'] = str(case['_id'])
-            
-        return jsonify(case)
+        return jsonify(case_dict)
     except Exception as e:
         logger.error(f"Error fetching case: {str(e)}")
         logger.error(f"Stack trace: {traceback.format_exc()}")
@@ -2975,6 +3021,7 @@ def update_case(case_id):
                 case.case_number = request.form.get('case_number')
                 case.status = request.form.get('status')
                 case.priority = request.form.get('priority')
+                case.client_id = request.form.get('client_id')
                 
                 # Handle dates
                 start_date = request.form.get('start_date')
@@ -2988,10 +3035,12 @@ def update_case(case_id):
                 case.save()
                 logger.debug("Case updated successfully")
                 
-                return jsonify({'success': True})
+                flash('Case updated successfully!', 'success')
+                return redirect(url_for('cases'))
             except Exception as e:
                 logger.error(f"Error updating case: {str(e)}")
-                return jsonify({'error': str(e)}), 500
+                flash(f'Error updating case: {str(e)}', 'error')
+                return redirect(url_for('edit_case', case_id=case_id))
 
         # Get all clients for the dropdown
         clients = Client.get_all()
@@ -2999,7 +3048,8 @@ def update_case(case_id):
         return render_template('edit_case.html', case=case, clients=clients)
     except Exception as e:
         logger.error(f"Error in edit case route: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        flash(f'Error: {str(e)}', 'error')
+        return redirect(url_for('cases'))
 
 @app.route('/case/<case_id>', methods=['DELETE'])
 @login_required
@@ -3027,96 +3077,92 @@ def get_client_cases(client_id):
 @login_required
 def appointments():
     try:
-        search_query = request.args.get('search', '')
-        if search_query:
-            appointments = Appointment.search(search_query)
-        else:
-            appointments = Appointment.get_all()
+        logger.debug("Starting appointments route")
         
-        # Get case titles for each appointment
+        # Get all appointments and sort by date_time in descending order
+        logger.debug("Fetching all appointments")
+        appointments = Appointment.get_all()
+        appointments.sort(key=lambda x: x.get('date_time', datetime.min), reverse=True)
+        logger.debug(f"Retrieved and sorted {len(appointments)} appointments")
+        
+        # Get all cases for the dropdown
+        logger.debug("Fetching all cases")
+        cases = Case.get_all()
+        logger.debug(f"Retrieved {len(cases)} cases")
+        
+        formatted_cases = []
+        for case in cases:
+            try:
+                case_id = case._id
+                logger.debug(f"Processing case: {case_id}")
+                # Get client information
+                client = Client.get_by_id(case.client_id)
+                if client:
+                    client_data = client.to_dict()
+                    logger.debug(f"Found client for case {case_id}: {client_data.get('_id')}")
+                    case_title = f"{case.case_number} - {client_data['first_name']} {client_data['last_name']}"
+                else:
+                    logger.debug(f"No client found for case {case_id}")
+                    case_title = f"{case.case_number} - Unknown Client"
+                
+                formatted_case = {
+                    '_id': str(case_id),
+                    'title': case_title
+                }
+                formatted_cases.append(formatted_case)
+            except Exception as case_error:
+                logger.error(f"Error formatting case {case_id if 'case_id' in locals() else 'unknown'}: {str(case_error)}")
+                logger.error(f"Case data: {case}")
+                continue
+
+        # Format appointments with case information
+        formatted_appointments = []
         for appointment in appointments:
             try:
-                case = Case.get_by_id(appointment['case_id'])
-                appointment['case_title'] = case['title'] if case else 'Unknown Case'
-            except Exception as e:
-                logger.error(f"Error fetching case for appointment: {str(e)}")
-                appointment['case_title'] = 'Unknown Case'
-        
-        cases = Case.get_all()  # For the add appointment form
-        return render_template('appointments.html', appointments=appointments, cases=cases)
+                appointment_id = appointment.get('appointment_id')
+                logger.debug(f"Processing appointment: {appointment_id}")
+                # Get case information
+                case = Case.get_by_id(appointment.get('case_id'))
+                if case:
+                    case_id = case._id
+                    logger.debug(f"Found case for appointment {appointment_id}: {case_id}")
+                    # Get client information
+                    client = Client.get_by_id(case.client_id)
+                    if client:
+                        client_data = client.to_dict()
+                        logger.debug(f"Found client for case {case_id}: {client_data.get('_id')}")
+                        case_title = f"{case.case_number} - {client_data['first_name']} {client_data['last_name']}"
+                    else:
+                        logger.debug(f"No client found for case {case_id}")
+                        case_title = f"{case.case_number} - Unknown Client"
+                else:
+                    logger.debug(f"No case found for appointment {appointment_id}")
+                    case_title = "Unknown Case"
+
+                formatted_appointment = {
+                    'appointment_id': appointment_id,
+                    'case_id': appointment.get('case_id'),
+                    'case_title': case_title,
+                    'date_time': appointment.get('date_time'),
+                    'location': appointment.get('location'),
+                    'purpose': appointment.get('purpose'),
+                    'status': appointment.get('status')
+                }
+                formatted_appointments.append(formatted_appointment)
+            except Exception as appt_error:
+                logger.error(f"Error formatting appointment {appointment.get('appointment_id')}: {str(appt_error)}")
+                logger.error(f"Appointment data: {appointment}")
+                continue
+
+        logger.debug(f"Successfully formatted {len(formatted_appointments)} appointments and {len(formatted_cases)} cases")
+        return render_template('appointments.html', 
+                             appointments=formatted_appointments,
+                             cases=formatted_cases)
     except Exception as e:
-        logger.error(f"Error in appointments route: {str(e)}")
-        flash('Error loading appointments', 'error')
+        logger.error(f"Error loading appointments: {str(e)}")
+        logger.error(f"Full error details:", exc_info=True)
+        flash('Error loading appointments. Please try again.', 'error')
         return render_template('appointments.html', appointments=[], cases=[])
-
-@app.route('/appointment', methods=['POST'])
-@login_required
-def create_appointment():
-    try:
-        # Validate required fields
-        required_fields = ['case_id', 'date_time', 'location', 'purpose', 'status']
-        for field in required_fields:
-            if not request.form.get(field):
-                return jsonify({'success': False, 'error': f'{field} is required'}), 400
-
-        # Validate date_time format
-        try:
-            date_time = datetime.strptime(request.form['date_time'], '%Y-%m-%dT%H:%M')
-        except ValueError:
-            return jsonify({'success': False, 'error': 'Invalid date and time format'}), 400
-
-        # Validate case_id exists
-        case = Case.get_by_id(request.form['case_id'])
-        if not case:
-            return jsonify({'success': False, 'error': 'Invalid case selected'}), 400
-
-        appointment_data = {
-            'case_id': request.form['case_id'],
-            'date_time': date_time,
-            'location': request.form['location'],
-            'purpose': request.form['purpose'],
-            'status': request.form['status']
-        }
-        
-        appointment = Appointment(**appointment_data)
-        appointment.save()
-        return jsonify({'success': True})
-    except Exception as e:
-        logger.error(f"Error creating appointment: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/appointment/<appointment_id>')
-@login_required
-def get_appointment(appointment_id):
-    try:
-        print(f"Fetching appointment with ID: {appointment_id}")  # Debug log
-        appointment = Appointment.get_by_id(appointment_id)
-        
-        if not appointment:
-            print(f"Appointment not found: {appointment_id}")  # Debug log
-            return jsonify({'error': 'Appointment not found'}), 404
-            
-        print(f"Found appointment: {appointment}")  # Debug log
-        
-        # Get case information
-        if appointment.get('case_id'):
-            case = Case.get_by_id(appointment['case_id'])
-            appointment['case_title'] = case['title'] if case else 'Unknown Case'  # Changed from 'description' to 'title'
-        else:
-            appointment['case_title'] = 'No Case Assigned'
-            
-        # Format date_time for JSON serialization
-        if appointment.get('date_time'):
-            appointment['date_time'] = appointment['date_time'].isoformat()
-        
-        # Convert ObjectId to string for JSON serialization
-        if '_id' in appointment and isinstance(appointment['_id'], ObjectId):
-            appointment['_id'] = str(appointment['_id'])
-            
-        return jsonify(appointment)
-    except Exception as e:
-        print(f"Error fetching appointment: {str(e)}")  # Debug log
-        return jsonify({'error': str(e)}), 400
 
 @app.route('/appointment/<appointment_id>', methods=['PUT'])
 @login_required
@@ -3246,7 +3292,8 @@ def edit_case(case_id):
         case = Case.get_by_id(case_id)
         if not case:
             logger.error(f"Case not found with ID: {case_id}")
-            return jsonify({'error': 'Case not found'}), 404
+            flash('Case not found', 'error')
+            return redirect(url_for('cases'))
 
         if request.method == 'POST':
             logger.debug(f"Processing edit case POST request for case ID: {case_id}")
@@ -3259,6 +3306,7 @@ def edit_case(case_id):
                 case.case_number = request.form.get('case_number')
                 case.status = request.form.get('status')
                 case.priority = request.form.get('priority')
+                case.client_id = request.form.get('client_id')
                 
                 # Handle dates
                 start_date = request.form.get('start_date')
@@ -3272,10 +3320,12 @@ def edit_case(case_id):
                 case.save()
                 logger.debug("Case updated successfully")
                 
-                return jsonify({'success': True})
+                flash('Case updated successfully!', 'success')
+                return redirect(url_for('cases'))
             except Exception as e:
                 logger.error(f"Error updating case: {str(e)}")
-                return jsonify({'error': str(e)}), 500
+                flash(f'Error updating case: {str(e)}', 'error')
+                return redirect(url_for('edit_case', case_id=case_id))
 
         # Get all clients for the dropdown
         clients = Client.get_all()
@@ -3283,35 +3333,85 @@ def edit_case(case_id):
         return render_template('edit_case.html', case=case, clients=clients)
     except Exception as e:
         logger.error(f"Error in edit case route: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        flash(f'Error: {str(e)}', 'error')
+        return redirect(url_for('cases'))
 
 @app.route('/appointment/<appointment_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_appointment(appointment_id):
-    appointment = Appointment.get_by_id(appointment_id)
-    if not appointment:
-        flash('Appointment not found', 'error')
-        return redirect(url_for('appointments'))
-    
-    if request.method == 'POST':
-        try:
-            update_data = {
-                'case_id': request.form['case_id'],
-                'date_time': datetime.strptime(request.form['date_time'], '%Y-%m-%dT%H:%M'),
-                'location': request.form['location'],
-                'purpose': request.form['purpose'],
-                'status': request.form['status']
-            }
-            
-            Appointment.update(appointment_id, update_data)
-            flash('Appointment updated successfully!', 'success')
+    try:
+        logger.debug(f"Accessing edit appointment page for appointment ID: {appointment_id}")
+        appointment = Appointment.get_by_id(appointment_id)
+        
+        if not appointment:
+            logger.error(f"Appointment not found with ID: {appointment_id}")
+            flash('Appointment not found', 'error')
             return redirect(url_for('appointments'))
-        except Exception as e:
-            flash(f'Error updating appointment: {str(e)}', 'error')
-            return redirect(url_for('edit_appointment', appointment_id=appointment_id))
-    
-    cases = Case.get_all()
-    return render_template('edit_appointment.html', appointment=appointment, cases=cases)
+        
+        if request.method == 'POST':
+            try:
+                # Get form data
+                case_id = request.form.get('case_id')  # This can be empty
+                date_time = datetime.strptime(request.form['date_time'], '%Y-%m-%dT%H:%M')
+                location = request.form['location']
+                purpose = request.form['purpose']
+                status = request.form['status']
+                
+                # Update appointment data
+                update_data = {
+                    'case_id': case_id,  # Can be None
+                    'date_time': date_time,
+                    'location': location,
+                    'purpose': purpose,
+                    'status': status
+                }
+                
+                logger.debug(f"Updating appointment with data: {update_data}")
+                Appointment.update(appointment_id, update_data)
+                flash('Appointment updated successfully!', 'success')
+                return redirect(url_for('appointments'))
+                
+            except ValueError as ve:
+                logger.error(f"Invalid date format: {str(ve)}")
+                flash('Invalid date format. Please use the correct format.', 'error')
+                return redirect(url_for('edit_appointment', appointment_id=appointment_id))
+            except Exception as e:
+                logger.error(f"Error updating appointment: {str(e)}")
+                flash(f'Error updating appointment: {str(e)}', 'error')
+                return redirect(url_for('edit_appointment', appointment_id=appointment_id))
+        
+        # Get all cases for the dropdown
+        cases = Case.get_all()
+        formatted_cases = []
+        for case in cases:
+            try:
+                client = Client.get_by_id(case.get('client_id'))
+                if client:
+                    client_data = client.to_dict()
+                    case_title = f"{case.get('case_number')} - {client_data['first_name']} {client_data['last_name']}"
+                else:
+                    case_title = f"{case.get('case_number')} - Unknown Client"
+                
+                formatted_case = {
+                    'case_id': str(case.get('_id')),
+                    'title': case_title
+                }
+                formatted_cases.append(formatted_case)
+            except Exception as case_error:
+                logger.error(f"Error formatting case: {str(case_error)}")
+                logger.error(f"Case data: {case}")
+                continue
+        
+        logger.debug("Rendering edit appointment form")
+        return render_template('edit_appointment.html', 
+                             appointment=appointment, 
+                             cases=formatted_cases)
+                             
+    except Exception as e:
+        logger.error(f"Error in edit appointment route: {str(e)}")
+        logger.error("Full error details:", exc_info=True)
+        flash(f'Error: {str(e)}', 'error')
+        return redirect(url_for('appointments'))
 
 @app.route('/case/<case_id>/documents', methods=['POST'])
 @login_required
@@ -3568,6 +3668,148 @@ def upload_temp_documents():
     except Exception as e:
         logger.error(f"Error uploading documents: {str(e)}")
         return jsonify({'error': str(e)}), 400
+
+@app.route('/case/<case_id>/court_visit', methods=['POST'])
+@login_required
+def add_court_visit(case_id):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        date = data.get('date')
+        notes = data.get('notes')
+
+        if not date or not notes:
+            return jsonify({'error': 'Date and notes are required'}), 400
+
+        # Get case
+        case = Case.get_by_id(case_id)
+        if not case:
+            return jsonify({'error': 'Case not found'}), 404
+
+        # Add court visit
+        case.add_court_visit(date, notes)
+        
+        # Save the updated case
+        case.save()
+
+        return jsonify({
+            'success': True,
+            'message': 'Court visit added successfully',
+            'visit': case.court_visits[-1]  # Return the newly added visit
+        })
+
+    except Exception as e:
+        logger.error(f"Error adding court visit: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/case/<case_id>/court_visit/<visit_id>', methods=['GET'])
+@login_required
+def get_court_visit(case_id, visit_id):
+    try:
+        case = Case.get_by_id(case_id)
+        if not case:
+            return jsonify({'error': 'Case not found'}), 404
+
+        visit = next((v for v in case.court_visits if v['_id'] == visit_id), None)
+        if not visit:
+            return jsonify({'error': 'Court visit not found'}), 404
+
+        return jsonify({
+            'date': visit['date'].strftime('%Y-%m-%d'),
+            'notes': visit['notes']
+        })
+    except Exception as e:
+        logger.error(f"Error getting court visit: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/case/<case_id>/court_visit/<visit_id>', methods=['PUT'])
+@login_required
+def update_court_visit(case_id, visit_id):
+    try:
+        data = request.get_json()
+        if not data or 'date' not in data or 'notes' not in data:
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        case = Case.get_by_id(case_id)
+        if not case:
+            return jsonify({'error': 'Case not found'}), 404
+
+        # Convert date string to datetime
+        visit_date = datetime.strptime(data['date'], '%Y-%m-%d')
+        
+        # Update court visit
+        visit = case.update_court_visit(visit_id, data['notes'])
+        if not visit:
+            return jsonify({'error': 'Court visit not found'}), 404
+
+        case.save()
+        return jsonify({
+            'success': True,
+            'message': 'Court visit updated successfully',
+            'visit': visit
+        })
+    except Exception as e:
+        logger.error(f"Error updating court visit: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/case/<case_id>/court_visit/<visit_id>', methods=['DELETE'])
+@login_required
+def delete_court_visit(case_id, visit_id):
+    try:
+        case = Case.get_by_id(case_id)
+        if not case:
+            return jsonify({'error': 'Case not found'}), 404
+
+        case.delete_court_visit(visit_id)
+        case.save()
+
+        return jsonify({
+            'success': True,
+            'message': 'Court visit deleted successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error deleting court visit: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/appointment/<appointment_id>', methods=['GET'])
+@login_required
+def get_appointment(appointment_id):
+    try:
+        appointment = Appointment.get_by_id(appointment_id)
+        if not appointment:
+            return jsonify({'error': 'Appointment not found'}), 404
+            
+        # Get case information if appointment has a case
+        case_title = "No Case Assigned"
+        if appointment.get('case_id'):
+            case = Case.get_by_id(appointment.get('case_id'))
+            if case:
+                client = Client.get_by_id(case.client_id)
+                if client:
+                    client_data = client.to_dict()
+                    case_title = f"{case.case_number} - {client_data['first_name']} {client_data['last_name']}"
+                else:
+                    case_title = f"{case.case_number} - Unknown Client"
+            else:
+                case_title = "Unknown Case"
+        
+        # Format appointment data
+        appointment_data = {
+            'appointment_id': appointment.get('appointment_id'),
+            'case_id': appointment.get('case_id'),
+            'case_title': case_title,
+            'date_time': appointment.get('date_time').strftime('%Y-%m-%dT%H:%M') if appointment.get('date_time') else None,
+            'location': appointment.get('location'),
+            'purpose': appointment.get('purpose'),
+            'status': appointment.get('status')
+        }
+        
+        return jsonify(appointment_data)
+    except Exception as e:
+        logger.error(f"Error getting appointment: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     try:

@@ -40,23 +40,23 @@
                             <tbody id="appointmentsTableBody">
                                 {% for appointment in appointments %}
                                 <tr>
-                                    <td>{{ appointment.date_time.strftime('%Y-%m-%d %H:%M') }}</td>
-                                    <td>{{ appointment.case_title }}</td>
-                                    <td>{{ appointment.location }}</td>
-                                    <td>{{ appointment.purpose }}</td>
+                                    <td>{{ appointment.get('date_time').strftime('%Y-%m-%d %H:%M') if appointment.get('date_time') else 'N/A' }}</td>
+                                    <td>{{ appointment.get('case_title', 'No Case Assigned') }}</td>
+                                    <td>{{ appointment.get('location', 'N/A') }}</td>
+                                    <td>{{ appointment.get('purpose', 'N/A') }}</td>
                                     <td>
-                                        <span class="badge {% if appointment.status == 'Scheduled' %}bg-primary{% elif appointment.status == 'Completed' %}bg-success{% else %}bg-danger{% endif %}">
-                                            {{ appointment.status }}
+                                        <span class="badge {% if appointment.get('status') == 'Scheduled' %}bg-primary{% elif appointment.get('status') == 'Completed' %}bg-success{% else %}bg-danger{% endif %}">
+                                            {{ appointment.get('status', 'N/A') }}
                                         </span>
                                     </td>
                                     <td>
-                                        <button class="btn btn-sm btn-info me-2" onclick="viewAppointment('{{ appointment.appointment_id }}')">
+                                        <button class="btn btn-sm btn-info me-2" onclick="viewAppointment('{{ appointment.get('appointment_id') }}')">
                                             <i class="fas fa-eye"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-warning me-2" onclick="editAppointment('{{ appointment.appointment_id }}')">
+                                        <button class="btn btn-sm btn-warning me-2" onclick="editAppointment('{{ appointment.get('appointment_id') }}')">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-danger" onclick="deleteAppointment('{{ appointment.appointment_id }}')">
+                                        <button class="btn btn-sm btn-danger" onclick="deleteAppointment('{{ appointment.get('appointment_id') }}')">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </td>
@@ -87,7 +87,7 @@
                             <select class="form-select" id="case_id" name="case_id" required>
                                 <option value="">Select Case</option>
                                 {% for case in cases %}
-                                <option value="{{ case.case_id }}">{{ case.title }}</option>
+                                <option value="{{ case._id }}">{{ case.title }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -173,7 +173,7 @@ function viewAppointment(appointmentId) {
             
             const detailsHtml = `
                 <div class="mb-3">
-                    <strong>Case:</strong> ${appointment.case_title || 'N/A'}
+                    <strong>Case:</strong> ${appointment.case_title || 'Unknown Case'}
                 </div>
                 <div class="mb-3">
                     <strong>Date & Time:</strong> ${new Date(appointment.date_time).toLocaleString()}

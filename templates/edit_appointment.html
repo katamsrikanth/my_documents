@@ -12,14 +12,15 @@
                     <form method="POST">
                         <div class="mb-3">
                             <label for="case_id" class="form-label">Case</label>
-                            <select class="form-select" id="case_id" name="case_id" required>
-                                <option value="">Select Case</option>
+                            <select class="form-select" id="case_id" name="case_id">
+                                <option value="">No Case Assigned</option>
                                 {% for case in cases %}
-                                <option value="{{ case.case_id }}" {% if case.case_id == appointment.case_id %}selected{% endif %}>
+                                <option value="{{ case.case_id }}" {% if appointment.get('case_id') == case.case_id %}selected{% endif %}>
                                     {{ case.title }}
                                 </option>
                                 {% endfor %}
                             </select>
+                            <small class="form-text text-muted">Select a case or leave empty if no case is assigned</small>
                         </div>
                         
                         <div class="mb-3">

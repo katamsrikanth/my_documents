@@ -12,6 +12,8 @@
     <div class="card">
         <div class="card-body">
             <form id="addClientForm" method="POST" action="{{ url_for('add_client') }}">
+                <div id="errorAlert" class="alert alert-danger d-none" role="alert"></div>
+                
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="first_name" class="form-label">First Name *</label>
@@ -163,4 +165,54 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('addClientForm');
+    const errorAlert = document.getElementById('errorAlert');
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Hide any previous error messages
+        errorAlert.classList.add('d-none');
+        
+        const formData = new FormData(form);
+        
+        fetch(form.action, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = "{{ url_for('clients') }}";
+            } else {
+                // Show error message
+                errorAlert.textContent = data.error || 'Error creating client';
+                errorAlert.classList.remove('d-none');
+                
+                // If it's a duplicate email error, highlight the email field
+                if (data.error && data.error.includes('duplicate key error') && data.error.includes('email')) {
+                    const emailInput = document.getElementById('email');
+                    emailInput.classList.add('is-invalid');
+                    emailInput.focus();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            errorAlert.textContent = 'An error occurred while creating the client';
+            errorAlert.classList.remove('d-none');
+        });
+    });
+    
+    // Remove error styling when user starts typing in email field
+    document.getElementById('email').addEventListener('input', function() {
+        this.classList.remove('is-invalid');
+    });
+});
+</script>
 {% endblock %} 

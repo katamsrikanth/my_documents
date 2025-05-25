@@ -35,6 +35,7 @@ class Case:
         self.priority = kwargs.get('priority')
         self.assigned_attorney_id = kwargs.get('assigned_attorney_id')
         self.documents = kwargs.get('documents', [])  # List of document metadata
+        self.court_visits = kwargs.get('court_visits', [])  # List of court visits with notes
         self.created_at = kwargs.get('created_at', datetime.utcnow())
         self.updated_at = kwargs.get('updated_at', datetime.utcnow())
 
@@ -64,6 +65,8 @@ class Case:
         
         if self._id:
             self.updated_at = datetime.now()
+            # Remove _id from save_data before update
+            save_data.pop('_id', None)
             collection.update_one(
                 {'_id': ObjectId(self._id)},
                 {'$set': save_data}
@@ -96,26 +99,31 @@ class Case:
                 try:
                     case_id = ObjectId(case_id)
                 except:
-                    # If conversion fails, use the string as is
-                    pass
+                    # If conversion fails, try to find by case_id field
+                    case_data = collection.find_one({'case_id': case_id})
+                    if case_data:
+                        case_data['_id'] = str(case_data['_id'])
+                        return Case(**case_data)
+                    return None
             
-            case = collection.find_one({'_id': case_id})
-            if case:
-                case['_id'] = str(case['_id'])
+            case_data = collection.find_one({'_id': case_id})
+            if case_data:
+                case_data['_id'] = str(case_data['_id'])
                 # Convert string dates to datetime objects
-                if isinstance(case.get('start_date'), str):
+                if isinstance(case_data.get('start_date'), str):
                     try:
-                        case['start_date'] = datetime.strptime(case['start_date'], '%Y-%m-%d')
+                        case_data['start_date'] = datetime.strptime(case_data['start_date'], '%Y-%m-%d')
                     except (ValueError, TypeError):
-                        case['start_date'] = None
-                if isinstance(case.get('end_date'), str):
+                        case_data['start_date'] = None
+                if isinstance(case_data.get('end_date'), str):
                     try:
-                        case['end_date'] = datetime.strptime(case['end_date'], '%Y-%m-%d')
+                        case_data['end_date'] = datetime.strptime(case_data['end_date'], '%Y-%m-%d')
                     except (ValueError, TypeError):
-                        case['end_date'] = None
-            return case
+                        case_data['end_date'] = None
+                return Case(**case_data)
+            return None
         except Exception as e:
-            print(f"Error in get_by_id: {str(e)}")
+            logger.error(f"Error in get_by_id: {str(e)}")
             return None
 
     @staticmethod
@@ -249,4 +257,35 @@ class Case:
     def get_document_path(case_id, filename):
         """Get the full path to a document"""
         return os.path.join('/Users/srikanthkatam/Documents/srikanth/Apps/legal_storage/case_documents', 
-                           str(case_id), filename) 
+                           str(case_id), filename)
+
+    def add_court_visit(self, visit_date, notes):
+        """Add a new court visit with notes"""
+        # Convert string date to datetime if needed
+        if isinstance(visit_date, str):
+            try:
+                visit_date = datetime.strptime(visit_date, '%Y-%m-%d')
+            except (ValueError, TypeError):
+                visit_date = datetime.utcnow()
+
+        visit = {
+            '_id': str(ObjectId()),
+            'date': visit_date,
+            'notes': notes,
+            'created_at': datetime.utcnow()
+        }
+        self.court_visits.append(visit)
+        return visit
+
+    def update_court_visit(self, visit_id, notes):
+        """Update notes for a specific court visit"""
+        for visit in self.court_visits:
+            if visit['_id'] == visit_id:
+                visit['notes'] = notes
+                visit['updated_at'] = datetime.utcnow()
+                return visit
+        return None
+
+    def delete_court_visit(self, visit_id):
+        """Delete a court visit"""
+        self.court_visits = [visit for visit in self.court_visits if visit['_id'] != visit_id] 
