@@ -3424,14 +3424,12 @@ def upload_case_documents(case_id):
     logger.debug(f"Processing document upload for case ID: {case_id}")
     try:
         # Get case data from database
-        case_data = Case.get_by_id(case_id)
-        if not case_data:
+        case = Case.get_by_id(case_id)
+        if not case:
             logger.error(f"Case not found with ID: {case_id}")
             return jsonify({'error': 'Case not found'}), 404
 
-        # Create Case object from the data
-        case = Case(**case_data)
-        logger.debug("Case object created successfully")
+        logger.debug("Case object retrieved successfully")
 
         if 'files' not in request.files:
             logger.warning("No files provided in request")
@@ -3815,6 +3813,40 @@ def get_appointment(appointment_id):
     except Exception as e:
         logger.error(f"Error getting appointment: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/appointment', methods=['POST'])
+@login_required
+def add_appointment():
+    try:
+        case_id = request.form.get('case_id')
+        date_time_str = request.form.get('date_time')
+        location = request.form.get('location')
+        purpose = request.form.get('purpose')
+        status = request.form.get('status', 'Scheduled')
+
+        # Validate required fields
+        if not date_time_str or not location or not purpose or not status:
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+
+        # Parse date_time
+        try:
+            date_time = datetime.strptime(date_time_str, '%Y-%m-%dT%H:%M')
+        except Exception:
+            return jsonify({'success': False, 'error': 'Invalid date/time format'}), 400
+
+        # Create and save the appointment
+        appointment = Appointment(
+            case_id=case_id,
+            date_time=date_time,
+            location=location,
+            purpose=purpose,
+            status=status
+        )
+        appointment.save()
+        return jsonify({'success': True, 'appointment_id': appointment.appointment_id})
+    except Exception as e:
+        logger.error(f'Error adding appointment: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     try:
