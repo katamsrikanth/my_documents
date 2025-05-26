@@ -1386,25 +1386,29 @@ def generate_documentation_with_ai(title, requirements, doc_type):
         
         # Use Gemini API to generate the document
         prompt = f"""
-        You are an expert legal document generator. Please create a {doc_type} document titled '{title}' based on the following requirements and knowledge.
-        
+        You are an expert legal document generator. You must strictly preserve the following legal template points—keeping their wording, numbering, and formatting exactly the same—while incorporating the dynamic input data provided below:
+
+        Document Type: {doc_type}
+        Title: '{title}'
+
         Requirements:
         {requirements}
-        
+
         Relevant Knowledge:
         {vector_knowledge}
-        
-        The document should:
+
+        The legal template points to keep exactly as-is:
+
         1. Be well-structured and professionally formatted
         2. Include all necessary legal clauses and sections
         3. Be suitable for professional use
         4. Follow standard legal document conventions
         5. Include proper headings and sections
         6. Use clear and precise language
-        
-        Format the document using HTML tags for proper display.
-        
-        Generated Document:
+
+        Format the entire generated document using HTML tags for proper display.
+
+        Generate the document now, updating only with the given dynamic data and instructions but preserving the template points verbatim.
         """
         
         document_content = generate_gemini_response(prompt)
@@ -1649,15 +1653,21 @@ def download_generated_document():
         # Create a new Document
         doc = Document()
         
+        # Set document styles
+        styles = doc.styles
+        style = styles['Normal']
+        style.font.name = 'Times New Roman'
+        style.font.size = Pt(12)
+        style.paragraph_format.line_spacing = 1.15
+        style.paragraph_format.space_after = Pt(10)
+        
         # Add title
         title_paragraph = doc.add_paragraph()
         title_run = title_paragraph.add_run(title)
         title_run.bold = True
         title_run.font.size = Pt(16)
-        title_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        
-        # Add spacing after title
-        doc.add_paragraph()
+        title_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_paragraph.space_after = Pt(20)
         
         # Convert HTML content to DOCX paragraphs
         soup = BeautifulSoup(content, 'html.parser')
@@ -1666,156 +1676,44 @@ def download_generated_document():
         list_counter = 1
         in_numbered_list = False
         
-        # Find the witness section
-        witness_section = None
-        for element in soup.find_all(['h2', 'h3', 'p', 'div']):
-            if element.get_text().strip().startswith('IN WITNESS WHEREOF'):
-                witness_section = element
-                break
-        
-        # Process content before witness section
-        for element in soup.find_all(['h2', 'h3', 'p', 'div', 'ul', 'li']):
-            if element == witness_section:
-                break
+        # Process each element
+        for element in soup.find_all(['h2', 'h3', 'p', 'ul', 'li', 'div']):
+            if element.name in ['h2', 'h3']:
+                # Add heading
+                p = doc.add_paragraph()
+                p.style = 'Heading 1' if element.name == 'h2' else 'Heading 2'
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                p.add_run(element.get_text().strip())
+                p.space_after = Pt(12)
                 
-            if element.name == 'h2':
-                # Add spacing before heading
-                doc.add_paragraph()
-                text = element.get_text().strip()
-                heading = doc.add_paragraph()
-                heading_run = heading.add_run(text)
-                heading_run.bold = True
-                heading_run.font.size = Pt(14)
-                heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                # Add spacing after heading
-                doc.add_paragraph()
-                # Reset list counter for new section
-                list_counter = 1
-                in_numbered_list = False
-            elif element.name == 'h3':
-                # Add spacing before subheading
-                doc.add_paragraph()
-                text = element.get_text().strip()
-                subheading = doc.add_paragraph()
-                subheading_run = subheading.add_run(text)
-                subheading_run.bold = True
-                subheading_run.font.size = Pt(12)
-                subheading.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                # Add spacing after subheading
-                doc.add_paragraph()
             elif element.name == 'p':
-                text = element.get_text().strip()
-                if text:
-                    p = doc.add_paragraph()
-                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                    p.add_run(text)
-                    # Add spacing after paragraph
-                    doc.add_paragraph()
-            elif element.name == 'div':
-                if 'section' in element.get('class', []):
-                    text = element.get_text().strip()
-                    if text:
-                        p = doc.add_paragraph()
-                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                        p.add_run(text)
-                        # Add spacing after section
-                        doc.add_paragraph()
-                elif 'subsection' in element.get('class', []):
-                    text = element.get_text().strip()
-                    if text:
-                        p = doc.add_paragraph()
-                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                        p.add_run(text)
-                        # Add spacing after subsection
-                        doc.add_paragraph()
-            elif element.name == 'ul':
-                # Add spacing before list
-                doc.add_paragraph()
-                # Start a new numbered list
-                in_numbered_list = True
-                list_counter = 1
-                for li in element.find_all('li'):
-                    text = li.get_text().strip()
-                    if text:
-                        p = doc.add_paragraph()
-                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                        p.add_run(f"{list_counter}. {text}")
-                        list_counter += 1
-                # Add spacing after list
-                doc.add_paragraph()
-            elif element.name == 'li':
-                text = element.get_text().strip()
-                if text:
-                    p = doc.add_paragraph()
-                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                    p.add_run(f"{list_counter}. {text}")
-                    list_counter += 1
-                    # Add spacing after list item
-                    doc.add_paragraph()
-        
-        # Process witness section
-        if witness_section:
-            # Add the witness section header
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            p.add_run(witness_section.get_text().strip())
-            doc.add_paragraph()
-            
-            # Create a table for the witness section
-            table = doc.add_table(rows=1, cols=2)
-            table.style = 'Table Grid'
-            
-            # Set column widths
-            for cell in table.columns[0].cells:
-                cell.width = Inches(3)
-            for cell in table.columns[1].cells:
-                cell.width = Inches(3)
-            
-            # Get all text after witness section
-            witness_content = []
-            current_element = witness_section.find_next()
-            while current_element:
-                if current_element.name in ['h2', 'h3', 'p', 'div']:
-                    text = current_element.get_text().strip()
-                    if text:
-                        witness_content.append(text)
-                current_element = current_element.find_next()
-            
-            # Split content into left and right columns
-            left_content = []
-            right_content = []
-            current = "left"
-            
-            for text in witness_content:
-                if "Lessee" in text or "Tenant" in text:
-                    current = "right"
-                elif "Lessor" in text or "Landlord" in text:
-                    current = "left"
+                # Add paragraph
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                p.add_run(element.get_text().strip())
                 
-                if current == "left":
-                    left_content.append(text)
-                else:
-                    right_content.append(text)
-            
-            # Add content to table cells
-            left_cell = table.cell(0, 0)
-            right_cell = table.cell(0, 1)
-            
-            # Add left content
-            for text in left_content:
-                p = left_cell.paragraphs[0] if len(left_cell.paragraphs) == 1 else left_cell.add_paragraph()
+            elif element.name == 'ul':
+                # Start bullet list
+                for li in element.find_all('li'):
+                    p = doc.add_paragraph()
+                    p.style = 'List Bullet'
+                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    p.add_run(li.get_text().strip())
+                    
+            elif element.name == 'li':
+                # Handle standalone list items
+                p = doc.add_paragraph()
+                p.style = 'List Bullet'
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                p.add_run(text)
-                if text != left_content[-1]:
-                    left_cell.add_paragraph()
-            
-            # Add right content
-            for text in right_content:
-                p = right_cell.paragraphs[0] if len(right_cell.paragraphs) == 1 else right_cell.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                p.add_run(text)
-                if text != right_content[-1]:
-                    right_cell.add_paragraph()
+                p.add_run(element.get_text().strip())
+                
+            elif element.name == 'div':
+                # Handle divs (usually sections)
+                text = element.get_text().strip()
+                if text:
+                    p = doc.add_paragraph()
+                    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                    p.add_run(text)
         
         # Save the document to the buffer
         doc.save(buffer)
