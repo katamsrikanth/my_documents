@@ -34,6 +34,8 @@ from models.initial_inquiry import InitialInquiry
 from models.attorney import Attorney
 from bson import ObjectId  # Add this import at the top if not present
 import uuid
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 # Load environment variables
 load_dotenv()
@@ -1386,30 +1388,41 @@ def generate_documentation_with_ai(title, requirements, doc_type):
         
         # Use Gemini API to generate the document
         prompt = f"""
-        You are an expert legal document generator. You must strictly preserve the following legal template points—keeping their wording, numbering, and formatting exactly the same—while incorporating the dynamic input data provided below:
+You are an expert legal document generator.
 
-        Document Type: {doc_type}
-        Title: '{title}'
+When generating any section that contains structured data (such as parties, property details, or any form-like information), use HTML <table>, <tr>, and <td> tags. Each label and value should be in its own cell. Do NOT use manual spaces or multiple <span> tags for alignment.
 
-        Requirements:
-        {requirements}
+For example:
+<table>
+  <tr><td>Landlord Name:</td><td>Swathi</td></tr>
+  <tr><td>Tenant Name:</td><td>Srikanth</td></tr>
+  <tr><td>Mailing Address:</td><td>213123, Frisco, Texas, USA</td></tr>
+</table>
 
-        Relevant Knowledge:
-        {vector_knowledge}
+Use headings for section titles. Format all structured/form sections using HTML tables.
 
-        The legal template points to keep exactly as-is:
+Document Type: {doc_type}
+Title: '{title}'
 
-        1. Be well-structured and professionally formatted
-        2. Include all necessary legal clauses and sections
-        3. Be suitable for professional use
-        4. Follow standard legal document conventions
-        5. Include proper headings and sections
-        6. Use clear and precise language
+Requirements:
+{requirements}
 
-        Format the entire generated document using HTML tags for proper display.
+Relevant Knowledge:
+{vector_knowledge}
 
-        Generate the document now, updating only with the given dynamic data and instructions but preserving the template points verbatim.
-        """
+The legal template points to keep exactly as-is:
+
+1. Be well-structured and professionally formatted
+2. Include all necessary legal clauses and sections
+3. Be suitable for professional use
+4. Follow standard legal document conventions
+5. Include proper headings and sections
+6. Use clear and precise language
+
+Format the entire generated document using HTML tags for proper display.
+
+Generate the document now, updating only with the given dynamic data and instructions but preserving the template points verbatim.
+"""
         
         document_content = generate_gemini_response(prompt)
         if not document_content:
@@ -1638,7 +1651,7 @@ def generate_document():
 @app.route('/download_generated_document', methods=['POST'])
 @login_required
 def download_generated_document():
-    """Generate and download the document as DOCX."""
+    """Generate and download the document as DOCX with improved formatting and invisible table borders."""
     try:
         data = request.get_json()
         content = data.get('content')
@@ -1669,15 +1682,31 @@ def download_generated_document():
         title_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
         title_paragraph.space_after = Pt(20)
         
-        # Convert HTML content to DOCX paragraphs
+        # Convert HTML content to DOCX paragraphs and tables
         soup = BeautifulSoup(content, 'html.parser')
         
-        # Track numbered list state
-        list_counter = 1
-        in_numbered_list = False
+        def set_table_no_borders(table):
+            table.style = 'Table Grid'
+            for row in table.rows:
+                for cell in row.cells:
+                    tc = cell._tc
+                    tcPr = tc.get_or_add_tcPr()
+                    borders = OxmlElement('w:tcBorders')
+                    for border_name in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+                        border = OxmlElement(f'w:{border_name}')
+                        border.set(qn('w:val'), 'none')
+                        borders.append(border)
+                    tcPr.append(borders)
         
-        # Process each element
-        for element in soup.find_all(['h2', 'h3', 'p', 'ul', 'li', 'div']):
+        def add_kv_table(pairs):
+            table = doc.add_table(rows=len(pairs), cols=2)
+            set_table_no_borders(table)
+            for i, (k, v) in enumerate(pairs):
+                table.cell(i, 0).text = k
+                table.cell(i, 1).text = v
+            doc.add_paragraph()  # Add space after table
+        
+        for element in soup.find_all(['h2', 'h3', 'p', 'ul', 'li', 'div', 'table']):
             if element.name in ['h2', 'h3']:
                 # Add heading
                 p = doc.add_paragraph()
@@ -1685,13 +1714,11 @@ def download_generated_document():
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 p.add_run(element.get_text().strip())
                 p.space_after = Pt(12)
-                
             elif element.name == 'p':
                 # Add paragraph
                 p = doc.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 p.add_run(element.get_text().strip())
-                
             elif element.name == 'ul':
                 # Start bullet list
                 for li in element.find_all('li'):
@@ -1699,21 +1726,40 @@ def download_generated_document():
                     p.style = 'List Bullet'
                     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                     p.add_run(li.get_text().strip())
-                    
             elif element.name == 'li':
                 # Handle standalone list items
                 p = doc.add_paragraph()
                 p.style = 'List Bullet'
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 p.add_run(element.get_text().strip())
-                
+            elif element.name == 'table':
+                # Convert HTML table to docx table
+                rows = element.find_all('tr')
+                if rows:
+                    table = doc.add_table(rows=len(rows), cols=len(rows[0].find_all(['td', 'th'])))
+                    set_table_no_borders(table)
+                    for i, row in enumerate(rows):
+                        cells = row.find_all(['td', 'th'])
+                        for j, cell in enumerate(cells):
+                            table.cell(i, j).text = cell.get_text().strip()
+                    doc.add_paragraph()
             elif element.name == 'div':
-                # Handle divs (usually sections)
-                text = element.get_text().strip()
-                if text:
-                    p = doc.add_paragraph()
-                    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                    p.add_run(text)
+                # Try to detect key-value pairs in divs (e.g., <div><span>Label:</span><span>Value</span></div>)
+                spans = element.find_all('span')
+                if len(spans) >= 2 and len(spans) % 2 == 0:
+                    pairs = []
+                    for i in range(0, len(spans), 2):
+                        k = spans[i].get_text().strip()
+                        v = spans[i+1].get_text().strip()
+                        pairs.append((k, v))
+                    add_kv_table(pairs)
+                else:
+                    # Fallback: treat as paragraph
+                    text = element.get_text().strip()
+                    if text:
+                        p = doc.add_paragraph()
+                        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                        p.add_run(text)
         
         # Save the document to the buffer
         doc.save(buffer)
