@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h2><i class="fas fa-lightbulb me-2"></i>Case Analyzer</h2>
+    <div class="card mb-4">
+        <div class="card-body">
+            <form id="caseAnalyzerForm" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="caseFile" class="form-label">Upload Court Case Document (PDF or Word)</label>
+                    <input type="file" class="form-control" id="caseFile" name="file" accept=".pdf,.doc,.docx" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-magic me-2"></i>Submit for Analysis
+                </button>
+            </form>
+        </div>
+    </div>
+    <div id="analysisLoading" class="text-center my-4" style="display:none;">
+        <i class="fas fa-spinner fa-spin fa-2x"></i>
+        <div>Analyzing document, please wait...</div>
+    </div>
+    <div id="analysisResults" style="display:none;">
+        <div class="card">
+            <div class="card-header">
+                <h5>Case Analysis Results</h5>
+            </div>
+            <div class="card-body" id="resultsBody">
+                <!-- Results will be injected here -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+$('#caseAnalyzerForm').on('submit', function(e) {
+    e.preventDefault();
+    var formData = new FormData(this);
+    $('#analysisResults').hide();
+    $('#analysisLoading').show();
+    $('#resultsBody').html('');
+    $.ajax({
+        url: '/api/case_analyzer',
+        method: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(resp) {
+            $('#analysisLoading').hide();
+            if (resp.success) {
+                let html = '';
+                const a = resp.analysis;
+                if (a.key_issues) html += `<h6>Key Issues</h6><ul>${a.key_issues.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.weaknesses) html += `<h6>Weaknesses</h6><ul>${a.weaknesses.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.missing_documentation) html += `<h6>Missing Documentation</h6><ul>${a.missing_documentation.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.suggested_strategies) html += `<h6>Suggested Legal Strategies</h6><ul>${a.suggested_strategies.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.expected_questions) html += `<h6>Expected Questions</h6><ul>${a.expected_questions.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.tips) html += `<h6>AI Tips</h6><ul>${a.tips.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.key_facts) html += `<h6>Key Case Facts</h6><ul>${a.key_facts.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.legal_risks) html += `<h6>Legal Risks or Gaps</h6><ul>${a.legal_risks.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.next_actions) html += `<h6>Recommended Next Actions</h6><ul>${a.next_actions.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.jurisdiction_considerations) html += `<h6>Jurisdiction-Specific Considerations</h6><ul>${a.jurisdiction_considerations.map(i=>`<li>${i}</li>`).join('')}</ul>`;
+                if (a.raw) html += `<pre>${a.raw}</pre>`;
+                $('#resultsBody').html(html || '<div class="text-muted">No detailed analysis returned.</div>');
+                $('#analysisResults').show();
+            } else {
+                $('#resultsBody').html('<div class="alert alert-danger">' + (resp.error || 'Analysis failed.') + '</div>');
+                $('#analysisResults').show();
+            }
+        },
+        error: function(xhr) {
+            $('#analysisLoading').hide();
+            $('#resultsBody').html('<div class="alert alert-danger">Error: ' + (xhr.responseJSON?.error || 'Unknown error') + '</div>');
+            $('#analysisResults').show();
+        }
+    });
+});
+</script>
+{% endblock %} 

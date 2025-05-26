@@ -194,6 +194,11 @@
                                     <i class="fas fa-camera"></i> Document Scanner
                                 </a>
                             </li>
+                            <li>
+                                <a class="dropdown-item {% if request.path == '/case_analyzer' %}active{% endif %}" href="/case_analyzer">
+                                    <i class="fas fa-lightbulb me-2"></i> Case Analyzer
+                                </a>
+                            </li>
                         </ul>
                     </li>
                     
@@ -230,15 +235,23 @@
                             <i class="fas fa-folder-open me-2"></i>Collections
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/court_cases' %}active{% endif %}" href="/court_cases">
-                            <i class="fas fa-gavel me-2"></i>Court Cases
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/index' %}active{% endif %}" href="/index">
+                    <!-- Search Dropdown with Court Cases -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.path == '/index' or request.path == '/court_cases' %}active{% endif %}" href="#" id="searchDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-search me-2"></i>Search
                         </a>
+                        <ul class="dropdown-menu" aria-labelledby="searchDropdown">
+                            <li>
+                                <a class="dropdown-item {% if request.path == '/index' %}active{% endif %}" href="/index">
+                                    <i class="fas fa-search me-2"></i>Search
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.path == '/court_cases' %}active{% endif %}" href="/court_cases">
+                                    <i class="fas fa-gavel me-2"></i>Court Cases
+                                </a>
+                            </li>
+                        </ul>
                     </li>
                 </ul>
 
@@ -263,6 +276,21 @@
                         </li>
                     {% endif %}
                 </ul>
+
+                <!-- Notifications Bell Icon -->
+                <ul class="navbar-nav ms-3">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link position-relative" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-bell fa-lg"></i>
+                            <span id="notificationBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:0.7em; display:none;">0</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" style="min-width: 320px; max-width: 400px;">
+                            <li class="dropdown-header">Upcoming Appointments</li>
+                            <li><div id="notificationsList" class="px-3 py-2 text-muted small">Loading...</div></li>
+                        </ul>
+                    </li>
+                </ul>
+                <!-- End Notifications Bell Icon -->
             </div>
         </div>
     </nav>
@@ -355,6 +383,38 @@
                     }, 300);
                 });
             });
+        });
+
+        $(document).ready(function() {
+            function fetchNotifications() {
+                $.getJSON('/api/upcoming-appointments', function(data) {
+                    var list = $('#notificationsList');
+                    var badge = $('#notificationBadge');
+                    if (data.count > 0) {
+                        badge.text(data.count).show();
+                        var html = '';
+                        data.appointments.forEach(function(appt) {
+                            html += `<div class='mb-2'>
+                                <div><i class='fas fa-calendar-alt me-1'></i> <strong>${appt.date_time}</strong></div>
+                                <div><i class='fas fa-briefcase me-1'></i> ${appt.case_title || 'No Case Assigned'}</div>
+                                <div><i class='fas fa-user me-1'></i> ${appt.client_name || 'N/A'}</div>
+                                <hr class='my-1'>
+                            </div>`;
+                        });
+                        list.html(html);
+                    } else {
+                        badge.hide();
+                        list.html('<span class="text-muted">No upcoming appointments in the next 2 weeks.</span>');
+                    }
+                }).fail(function() {
+                    $('#notificationsList').html('<span class="text-danger">Error loading notifications.</span>');
+                    $('#notificationBadge').hide();
+                });
+            }
+            // Fetch notifications when dropdown is shown
+            $('#notificationsDropdown').on('show.bs.dropdown', fetchNotifications);
+            // Optionally, fetch on page load for badge
+            fetchNotifications();
         });
     </script>
     {% block extra_js %}{% endblock %}

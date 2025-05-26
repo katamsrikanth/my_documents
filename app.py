@@ -5,7 +5,7 @@ from PyPDF2 import PdfReader
 import textwrap
 from werkzeug.utils import secure_filename
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import requests
 import json
@@ -418,17 +418,16 @@ def extract_text_from_file(file_path):
     """Extract text from a file (PDF or DOCX)"""
     try:
         logger.info(f"Extracting text from file: {file_path}")
-        
         if not os.path.exists(file_path):
             logger.error(f"File not found: {file_path}")
             return None
-            
-        if file_path.lower().endswith('.pdf'):
+        ext = file_path.lower().split('.')[-1]
+        if ext == 'pdf':
             text = extract_text_from_pdf(file_path)
             if not text:
                 logger.error("Failed to extract text from PDF")
                 return None
-        elif file_path.lower().endswith(('.docx', '.doc')):
+        elif ext == 'docx':
             try:
                 import docx
                 doc = docx.Document(file_path)
@@ -439,10 +438,12 @@ def extract_text_from_file(file_path):
             except Exception as e:
                 logger.error(f"Error reading DOCX file: {str(e)}")
                 return None
+        elif ext == 'doc':
+            logger.error("Legacy .doc files are not supported. Please upload a .docx file.")
+            return None
         else:
             logger.error(f"Unsupported file type: {file_path}")
             return None
-            
         return clean_text(text)
     except Exception as e:
         logger.error(f"Error reading file: {str(e)}")
@@ -3847,6 +3848,117 @@ def add_appointment():
     except Exception as e:
         logger.error(f'Error adding appointment: {str(e)}')
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/upcoming-appointments')
+@login_required
+def api_upcoming_appointments():
+    try:
+        now = datetime.utcnow()
+        two_weeks_later = now + timedelta(days=14)
+        appointments = Appointment.get_all()
+        upcoming = []
+        for appt in appointments:
+            dt = appt.get('date_time')
+            if isinstance(dt, str):
+                try:
+                    dt = datetime.fromisoformat(dt)
+                except Exception:
+                    continue
+            if not dt or not (now <= dt <= two_weeks_later):
+                continue
+            # Get case info
+            case_title = None
+            client_name = None
+            if appt.get('case_id'):
+                case = Case.get_by_id(appt.get('case_id'))
+                if case:
+                    case_title = getattr(case, 'case_number', None) or str(getattr(case, '_id', ''))
+                    client_id = getattr(case, 'client_id', None)
+                    client = Client.get_by_id(client_id) if client_id else None
+                    if client:
+                        client_name = f"{getattr(client, 'first_name', '')} {getattr(client, 'last_name', '')}".strip()
+            upcoming.append({
+                'appointment_id': appt.get('appointment_id'),
+                'date_time': dt.strftime('%Y-%m-%d %H:%M'),
+                'case_title': case_title,
+                'client_name': client_name,
+            })
+        return jsonify({'appointments': upcoming, 'count': len(upcoming)})
+    except Exception as e:
+        logger.error(f"Error fetching upcoming appointments: {str(e)}")
+        return jsonify({'appointments': [], 'count': 0, 'error': str(e)}), 500
+
+@app.route('/case_analyzer')
+@login_required
+def case_analyzer():
+    return render_template('case_analyzer.html')
+
+@app.route('/api/case_analyzer', methods=['POST'])
+@login_required
+def api_case_analyzer():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        ext = file.filename.rsplit('.', 1)[-1].lower()
+        temp_path = os.path.join(tempfile.gettempdir(), secure_filename(file.filename))
+        file.save(temp_path)
+        # Extract text
+        if ext == 'pdf':
+            text = extract_text_from_pdf(temp_path)
+        elif ext in ('docx', 'doc'):
+            text = extract_text_from_file(temp_path)
+        else:
+            return jsonify({'error': 'Unsupported file type'}), 400
+        if not text:
+            return jsonify({'error': 'Could not extract text from file'}), 400
+        # Local vector DB search (reuse perform_search or similar)
+        local_results = perform_search('analyze this case', None)
+        # Web search supplement (simulate with web_search or placeholder)
+        web_supplement = 'Web search results: [Simulated trusted legal info]'
+        # AI analysis prompt
+        prompt = f"""
+        You are a legal analysis assistant.
+
+        Analyze the following court case document and return a structured JSON containing:
+
+        - key_issues: List the central legal issues in the case.
+        - weaknesses: Highlight any weaknesses in the arguments or evidence presented.
+        - missing_documents: List any documentation that appears to be missing or insufficient.
+        - suggested_strategies: Provide legal strategies to strengthen the case and prepare for court.
+        - likely_hearing_questions: Suggest common or challenging questions that might arise in the next hearing.
+        - winning_tips: Offer general AI-generated recommendations to improve the chances of winning.
+        - case_facts: Summarize the critical facts relevant to the court.
+        - legal_risks: Identify any potential legal vulnerabilities or oversights.
+        - recommended_next_steps: Concrete actions the legal team or plaintiff should take.
+        - jurisdiction_considerations: Mention any legal specifics based on the applicable jurisdiction.
+
+        Use the following as context for your legal reasoning:
+        {local_results}
+
+        Additional knowledge from trusted sources:
+        {web_supplement}
+
+        Document Content:
+        {text}
+
+        Return ONLY valid, parseable JSON under a top-level key: "case_analysis_results"
+        """
+        ai_response = generate_gemini_response(prompt)
+        import re, json
+        json_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+        if json_match:
+            analysis = json.loads(json_match.group(0))
+            if 'case_analysis_results' in analysis:
+                analysis = analysis['case_analysis_results']
+        else:
+            analysis = {'raw': ai_response}
+        return jsonify({'success': True, 'analysis': analysis})
+    except Exception as e:
+        logger.error(f'Error in case analyzer: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
     try:
