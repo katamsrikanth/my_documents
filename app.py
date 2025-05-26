@@ -377,7 +377,15 @@ def extract_text_from_pdf(pdf_path):
                 fields = reader.get_fields()
                 for field_name, field_value in fields.items():
                     if field_value and str(field_value).strip():
-                        text += f"{field_name}: {field_value}\n"
+                        # Get the clean field name (either T or TU attribute)
+                        field_obj = field_value
+                        clean_name = field_obj.get('/T') or field_obj.get('/TU') or field_name
+                        # Remove any PDF-specific prefixes or suffixes
+                        clean_name = clean_name.replace('/T', '').replace('/TU', '').strip()
+                        # Get the field value
+                        field_value = field_obj.get('/V', '')
+                        if field_value:
+                            text += f"{clean_name}: {field_value}\n"
                 logger.info(f"Extracted {len(fields)} form field values")
         except Exception as e:
             logger.warning(f"Could not extract form fields: {str(e)}")
@@ -400,7 +408,7 @@ def extract_text_from_pdf(pdf_path):
             return None
             
         logger.info(f"Successfully extracted text from {len(reader.pages)} pages")
-        logger.debug(f"Extracted text: {text[:500]}...")  # Log first 500 chars for debugging
+        logger.debug(f"Extracted text: {text[:500]}...")
         return text
     except Exception as e:
         logger.error(f"Error reading PDF: {str(e)}")
@@ -2242,7 +2250,6 @@ def scan_document_for_fields(document_path, document_type):
         1. Which fields are missing (not present in the document)
         2. Which fields are present and filled by the user
         3. Which fields are present but empty
-        4. The exact location (start and end indices) of each field in the document text
         
         Document Type: {document_type}
         Document Content:
@@ -2250,28 +2257,9 @@ def scan_document_for_fields(document_path, document_type):
         
         Return the analysis in this exact JSON format:
         {{
-            "missing_fields": [
-                {{
-                    "name": "field name",
-                    "description": "brief description of the field"
-                }}
-            ],
-            "filled_fields": [
-                {{
-                    "name": "field name",
-                    "value": "field value",
-                    "start": start_index,
-                    "end": end_index
-                }}
-            ],
-            "empty_fields": [
-                {{
-                    "name": "field name",
-                    "start": start_index,
-                    "end": end_index,
-                    "description": "brief description of what should be filled"
-                }}
-            ],
+            "missing_fields": ["list of missing field names"],
+            "filled_fields": ["list of fields that are present and filled"],
+            "empty_fields": ["list of fields that are present but empty"],
             "analysis": "brief explanation of the findings"
         }}
         """
@@ -2309,21 +2297,12 @@ def scan_document_for_fields(document_path, document_type):
             logger.info(f"Analysis: {analysis.get('analysis', '')}")
             
             # Convert empty fields to improper fields format
-            improper_fields = [
-                {
-                    'field': field['name'],
-                    'reason': field.get('description', 'Field is present but empty'),
-                    'start': field.get('start'),
-                    'end': field.get('end')
-                }
-                for field in analysis.get('empty_fields', [])
-            ]
+            improper_fields = [{'field': field, 'reason': 'Field is present but empty'} 
+                             for field in analysis.get('empty_fields', [])]
             
             return {
-                'document_text': text,
                 'missing_fields': analysis.get('missing_fields', []),
                 'improper_fields': improper_fields,
-                'filled_fields': analysis.get('filled_fields', []),
                 'analysis': analysis.get('analysis', ''),
                 'error': None
             }
@@ -2388,33 +2367,31 @@ def scan_document():
         try:
             # Scan the document
             scan_results = scan_document_for_fields(temp_path, document_type)
-            
+            document_text = extract_text_from_file(temp_path)
             if scan_results.get('error'):
                 return jsonify({
                     'status': 'error',
-                    'message': scan_results['error']
+                    'message': scan_results['error'],
+                    'document_text': document_text or ''
                 }), 400
-            
             # Prepare response
             if not scan_results['missing_fields'] and not scan_results['improper_fields']:
                 return jsonify({
                     'status': 'complete',
                     'message': 'Document scan completed successfully. All mandatory fields are properly filled.',
-                    'document_text': scan_results.get('document_text', ''),
                     'missing_fields': [],
                     'improper_fields': [],
-                    'filled_fields': scan_results.get('filled_fields', []),
-                    'analysis': scan_results.get('analysis', '')
+                    'analysis': scan_results.get('analysis', ''),
+                    'document_text': document_text or ''
                 })
             else:
                 return jsonify({
                     'status': 'incomplete',
                     'message': 'Document scan completed. Some fields need attention.',
-                    'document_text': scan_results.get('document_text', ''),
                     'missing_fields': scan_results['missing_fields'],
                     'improper_fields': scan_results['improper_fields'],
-                    'filled_fields': scan_results.get('filled_fields', []),
-                    'analysis': scan_results.get('analysis', '')
+                    'analysis': scan_results.get('analysis', ''),
+                    'document_text': document_text or ''
                 })
                 
         finally:
@@ -2891,7 +2868,7 @@ def cases():
     try:
         # Get all cases using the Case model
         cases = Case.get_all()
-        
+    
         # Get all clients for the dropdown
         clients = Client.get_all()
         
@@ -3111,33 +3088,27 @@ def get_client_cases(client_id):
 def appointments():
     try:
         logger.debug("Starting appointments route")
-        
         # Get all appointments and sort by date_time in descending order
         logger.debug("Fetching all appointments")
         appointments = Appointment.get_all()
         appointments.sort(key=lambda x: x.get('date_time', datetime.min), reverse=True)
         logger.debug(f"Retrieved and sorted {len(appointments)} appointments")
-        
         # Get all cases for the dropdown
         logger.debug("Fetching all cases")
         cases = Case.get_all()
         logger.debug(f"Retrieved {len(cases)} cases")
-        
         formatted_cases = []
         for case in cases:
             try:
-                case_id = case._id
-                logger.debug(f"Processing case: {case_id}")
+                case_id = case['_id']
+                client_id = case.get('client_id')
                 # Get client information
-                client = Client.get_by_id(case.client_id)
+                client = Client.get_by_id(client_id)
                 if client:
                     client_data = client.to_dict()
-                    logger.debug(f"Found client for case {case_id}: {client_data.get('_id')}")
-                    case_title = f"{case.case_number} - {client_data['first_name']} {client_data['last_name']}"
+                    case_title = f"{case.get('case_number', '')} - {client_data.get('first_name', '')} {client_data.get('last_name', '')}"
                 else:
-                    logger.debug(f"No client found for case {case_id}")
-                    case_title = f"{case.case_number} - Unknown Client"
-                
+                    case_title = f"{case.get('case_number', '')} - Unknown Client"
                 formatted_case = {
                     '_id': str(case_id),
                     'title': case_title
@@ -3147,7 +3118,8 @@ def appointments():
                 logger.error(f"Error formatting case {case_id if 'case_id' in locals() else 'unknown'}: {str(case_error)}")
                 logger.error(f"Case data: {case}")
                 continue
-
+        logger.debug(f"Formatted cases for dropdown: {formatted_cases}")
+        logger.debug(f"Total formatted cases: {len(formatted_cases)}")
         # Format appointments with case information
         formatted_appointments = []
         for appointment in appointments:

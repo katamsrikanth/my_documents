@@ -1,103 +1,85 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row mb-4">
-        <div class="col-12">
-            <h2 class="mb-4">Document Scanner</h2>
-            
-            <div class="card">
-                <div class="card-body">
-                    <form id="documentScannerForm" enctype="multipart/form-data">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="documentFile" class="form-label">Upload Document</label>
-                                    <input type="file" class="form-control" id="documentFile" name="document" accept=".pdf,.doc,.docx" required>
-                                    <div class="form-text">Supported formats: PDF, DOC, DOCX</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="documentType" class="form-label">Document Type</label>
-                                    <select class="form-select" id="documentType" name="document_type" required>
-                                        <option value="">Select document type</option>
-                                        <option value="contract">Contract</option>
-                                        <option value="application">Application Form</option>
-                                        <option value="agreement">Agreement</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary">
-                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                            Scan Document
-                        </button>
-                    </form>
+<div class="container mt-4">
+    <h2 class="mb-4">Document Scanner</h2>
+    <div class="card mb-4">
+        <div class="card-body">
+            <form id="documentScannerForm" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="documentFile" class="form-label">Upload Document</label>
+                    <input type="file" class="form-control" id="documentFile" name="document" accept=".pdf,.doc,.docx" required>
+                    <div class="form-text">Supported formats: PDF, DOC, DOCX</div>
                 </div>
-            </div>
+                <div class="mb-3">
+                    <label for="documentType" class="form-label">Document Type</label>
+                    <select class="form-select" id="documentType" name="document_type" required>
+                        <option value="">Select document type</option>
+                        <option value="contract">Contract</option>
+                        <option value="application">Application Form</option>
+                        <option value="agreement">Agreement</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    Scan Document
+                </button>
+            </form>
         </div>
     </div>
 
     <div id="scanResults" class="row" style="display: none;">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="col-lg-8 mb-4 mb-lg-0">
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center justify-content-between">
                     <h5 class="mb-0">Document Preview</h5>
-                    <div class="btn-group">
-                        <button class="btn btn-outline-primary btn-sm active" data-view="document">
-                            <i class="fas fa-file-alt"></i> Document View
-                        </button>
-                        <button class="btn btn-outline-primary btn-sm" data-view="fields">
-                            <i class="fas fa-list"></i> Field View
-                        </button>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary active" id="toggleDocView">Document View</button>
+                        <button type="button" class="btn btn-outline-secondary" id="toggleFieldView">Field View</button>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div id="documentPreview" class="document-container">
-                        <div class="document-text"></div>
+                <div class="card-body" style="min-height: 300px;">
+                    <div id="documentPreview" class="document-preview"></div>
+                    <div id="fieldView" style="display:none;">
+                        <h6>All Issues</h6>
+                        <ul class="list-group" id="fieldViewList"></ul>
                     </div>
                 </div>
             </div>
         </div>
-        
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Analysis Panel</h5>
-                    <button class="btn btn-link btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#analysisPanel">
-                        <i class="fas fa-chevron-down"></i>
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div id="scanStatus" class="mb-3"></div>
-                    
-                    <div class="collapse show" id="analysisPanel">
-                        <div id="aiAnalysis" class="mb-3"></div>
-                        
-                        <div class="analysis-section mb-3">
-                            <h6 class="section-title">
-                                <i class="fas fa-exclamation-triangle text-danger me-2"></i>
-                                Missing Fields
-                            </h6>
-                            <div id="missingFields" class="analysis-content"></div>
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Issue Details</h5>
+            </div>
+            <div class="card-body">
+                <div id="scanStatus" class="mb-3"></div>
+                <div id="aiAnalysis" class="mb-3"></div>
+                    <div class="accordion" id="issueAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingMissing">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMissing" aria-expanded="true" aria-controls="collapseMissing">
+                                    <span class="me-2">⚠️</span> Missing Fields
+                                </button>
+                            </h2>
+                            <div id="collapseMissing" class="accordion-collapse collapse show" aria-labelledby="headingMissing" data-bs-parent="#issueAccordion">
+                                <div class="accordion-body p-0">
+                                    <ul class="list-group list-group-flush" id="missingFields"></ul>
+                                </div>
+                            </div>
                         </div>
-                        
-                        <div class="analysis-section mb-3">
-                            <h6 class="section-title">
-                                <i class="fas fa-exclamation-circle text-warning me-2"></i>
-                                Improper Fields
-                            </h6>
-                            <div id="improperFields" class="analysis-content"></div>
-                        </div>
-                        
-                        <div class="analysis-section">
-                            <h6 class="section-title">
-                                <i class="fas fa-check-circle text-success me-2"></i>
-                                Filled Fields
-                            </h6>
-                            <div id="filledFields" class="analysis-content"></div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="headingImproper">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseImproper" aria-expanded="false" aria-controls="collapseImproper">
+                                    <span class="me-2">❌</span> Improper Fields
+                                </button>
+                            </h2>
+                            <div id="collapseImproper" class="accordion-collapse collapse" aria-labelledby="headingImproper" data-bs-parent="#issueAccordion">
+                                <div class="accordion-body p-0">
+                                    <ul class="list-group list-group-flush" id="improperFields"></ul>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -107,408 +89,246 @@
 </div>
 
 <style>
-.document-container {
-    background-color: #fff;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 2rem;
-    max-height: 800px;
-    overflow-y: auto;
-    position: relative;
+.document-preview {
+  white-space: pre-wrap;
+  font-family: "Segoe UI", sans-serif;
+  line-height: 1.6;
+  padding: 2rem;
+  background-color: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  min-height: 200px;
+  max-height: 600px;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-.document-text {
-    font-family: 'Times New Roman', Times, serif;
-    font-size: 1.1rem;
-    line-height: 1.8;
-    white-space: pre-wrap;
+.document-preview p {
+  margin-bottom: 1.5rem;
+  text-indent: 2em;
+  line-height: 1.8;
 }
 
-.highlight {
-    padding: 2px 0;
-    border-radius: 2px;
-    cursor: help;
-    position: relative;
-    display: inline-block;
+.document-preview p:first-child {
+  text-indent: 0;
 }
 
-.highlight.missing {
-    background-color: #fff3cd;
-    border-bottom: 2px dashed #f0ad4e;
+.document-preview mark.missing-field {
+  background-color: #fff3cd;
+  border-bottom: 1px dashed #f0ad4e;
+  color: #856404;
+  padding: 0 2px;
+  cursor: pointer;
+  border-radius: 2px;
 }
 
-.highlight.improper {
-    background-color: #f8d7da;
-    border-bottom: 2px dashed #dc3545;
+.document-preview mark.incorrect-field {
+  background-color: #f8d7da;
+  border-bottom: 1px dashed #dc3545;
+  color: #721c24;
+  padding: 0 2px;
+  cursor: pointer;
+  border-radius: 2px;
 }
 
-.highlight.filled {
-    background-color: #d4edda;
-    border-bottom: 2px dashed #28a745;
+.document-preview mark.highlighted-issue {
+  animation: highlight-pulse 1.5s ease-in-out;
 }
 
-.analysis-section {
-    background-color: #f8f9fa;
-    border-radius: 8px;
+@keyframes highlight-pulse {
+  0% { background-color: #fff3cd; }
+  50% { background-color: #ffe69c; }
+  100% { background-color: #fff3cd; }
+}
+
+.issue-link {
+  cursor: pointer;
+  text-decoration: underline;
+  color: #0d6efd;
+}
+
+.issue-link:hover {
+  color: #0a58ca;
+}
+
+@media (max-width: 991.98px) {
+  .row > .col-lg-8, .row > .col-lg-4 {
+    max-width: 100%;
+    flex: 0 0 100%;
+  }
+  .document-preview {
+    max-height: 300px;
     padding: 1rem;
-    margin-bottom: 1rem;
-}
-
-.section-title {
-    color: #495057;
-    margin-bottom: 1rem;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-}
-
-.analysis-content {
-    line-height: 1.6;
-}
-
-.list-group-item {
-    border-left: none;
-    border-right: none;
-    transition: background-color 0.2s;
-}
-
-.list-group-item:hover {
-    background-color: #f8f9fa;
-}
-
-.list-group-item:first-child {
-    border-top: none;
-}
-
-.list-group-item:last-child {
-    border-bottom: none;
-}
-
-.field-tag {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    margin-right: 0.5rem;
-}
-
-.field-tag.missing {
-    background-color: #fff3cd;
-    color: #856404;
-}
-
-.field-tag.improper {
-    background-color: #f8d7da;
-    color: #721c24;
-}
-
-.field-tag.filled {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-.scroll-to-field {
-    color: #6c757d;
-    cursor: pointer;
-    margin-left: auto;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    transition: background-color 0.2s;
-}
-
-.scroll-to-field:hover {
-    background-color: #e9ecef;
-    color: #495057;
-}
-
-/* Custom scrollbar for document container */
-.document-container::-webkit-scrollbar {
-    width: 8px;
-}
-
-.document-container::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
-
-.document-container::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 4px;
-}
-
-.document-container::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
-
-/* Tooltip customization */
-.tooltip {
-    font-size: 0.9rem;
-}
-
-.tooltip-inner {
-    max-width: 300px;
-    padding: 0.5rem 1rem;
-    background-color: #495057;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-/* Filter buttons */
-.filter-buttons {
-    margin-bottom: 1rem;
-}
-
-.filter-buttons .btn {
-    margin-right: 0.5rem;
-}
-
-.filter-buttons .btn.active {
-    background-color: #007bff;
-    color: white;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .document-container {
-        max-height: 500px;
-    }
-    
-    .analysis-section {
-        margin-top: 1rem;
-    }
+  }
 }
 </style>
 
 <script>
+// Toggle between Document View and Field View
+const toggleDocView = document.getElementById('toggleDocView');
+const toggleFieldView = document.getElementById('toggleFieldView');
+const documentPreview = document.getElementById('documentPreview');
+const fieldView = document.getElementById('fieldView');
+
+toggleDocView.addEventListener('click', function() {
+    toggleDocView.classList.add('active');
+    toggleFieldView.classList.remove('active');
+    documentPreview.style.display = 'block';
+    fieldView.style.display = 'none';
+});
+
+toggleFieldView.addEventListener('click', function() {
+    toggleFieldView.classList.add('active');
+    toggleDocView.classList.remove('active');
+    documentPreview.style.display = 'none';
+    fieldView.style.display = 'block';
+});
+
 document.getElementById('documentScannerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
     const submitButton = document.querySelector('button[type="submit"]');
     const spinner = submitButton.querySelector('.spinner-border');
     const formData = new FormData();
     formData.append('document', document.getElementById('documentFile').files[0]);
     formData.append('document_type', document.getElementById('documentType').value);
-    
-    // Show loading spinner
     spinner.classList.remove('d-none');
     submitButton.disabled = true;
-    
     try {
         const response = await fetch('/scan_document', {
             method: 'POST',
             body: formData
         });
-        
         const result = await response.json();
-        
         document.getElementById('scanResults').style.display = 'flex';
         document.getElementById('scanStatus').innerHTML = `
             <div class="alert ${result.status === 'complete' ? 'alert-success' : 'alert-warning'}">
                 ${result.message}
             </div>
         `;
-        
-        // Display document text with highlights
-        let documentText = result.document_text;
+        // Build highlighted HTML with unique IDs for each issue
+        let docText = result.document_text || '';
         const highlights = [];
-        
-        // Add missing fields highlights
+        let issueId = 0;
+        // Missing fields (only highlight if indices exist)
         result.missing_fields.forEach(field => {
+            if (typeof field === 'string') field = { name: field };
             if (field.start !== undefined && field.end !== undefined) {
                 highlights.push({
+                    id: `missing-${issueId++}`,
                     start: field.start,
                     end: field.end,
-                    type: 'missing',
-                    text: documentText.substring(field.start, field.end),
-                    reason: field.description || `Missing field: ${field.name}`
+                    type: 'missing-field',
+                    text: docText.substring(field.start, field.end),
+                    reason: field.description || `Missing field: ${field.name}`,
+                    name: field.name
                 });
             }
         });
-        
-        // Add improper fields highlights
+        // Improper fields
         result.improper_fields.forEach(field => {
+            if (typeof field === 'string') field = { field: field };
             if (field.start !== undefined && field.end !== undefined) {
                 highlights.push({
+                    id: `improper-${issueId++}`,
                     start: field.start,
                     end: field.end,
-                    type: 'improper',
-                    text: documentText.substring(field.start, field.end),
-                    reason: field.reason
+                    type: 'incorrect-field',
+                    text: docText.substring(field.start, field.end),
+                    reason: field.reason,
+                    name: field.field
                 });
             }
         });
-        
-        // Add filled fields highlights
-        result.filled_fields.forEach(field => {
-            if (field.start !== undefined && field.end !== undefined) {
-                highlights.push({
-                    start: field.start,
-                    end: field.end,
-                    type: 'filled',
-                    text: field.value,
-                    reason: `Field "${field.name}" is filled`
-                });
-            }
-        });
-        
-        // Sort highlights by start position (reverse order to maintain indices)
+        // Sort highlights by start position (reverse order)
         highlights.sort((a, b) => b.start - a.start);
-        
-        // Apply highlights
-        highlights.forEach(highlight => {
-            const before = documentText.substring(0, highlight.start);
-            const after = documentText.substring(highlight.end);
-            documentText = `${before}<mark class="highlight ${highlight.type}" data-bs-toggle="tooltip" title="${highlight.reason}" data-field-id="${highlight.type}-${highlight.start}">${highlight.text}</mark>${after}`;
+        // Apply highlights with unique IDs
+        highlights.forEach(h => {
+            const before = docText.substring(0, h.start);
+            const after = docText.substring(h.end);
+            docText = `${before}<mark class="${h.type}" data-issue-id="${h.id}" title="${h.reason}">${h.text}</mark>${after}`;
         });
+        // Split into paragraphs and format
+        let paragraphs = docText.split(/\n\s*\n/);
+        let html = paragraphs.map(p => {
+            // Preserve indentation for paragraphs that start with spaces
+            const indent = p.match(/^\s+/)?.[0] || '';
+            const content = p.trim();
+            if (content) {
+                return `<p style="text-indent: ${indent.length}em;">${content}</p>`;
+            }
+            return '';
+        }).join('');
         
-        document.querySelector('.document-text').innerHTML = documentText;
-        
-        // Initialize tooltips
-        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl, {
-                placement: 'top',
-                trigger: 'hover'
-            });
+        // Fallback: if html is empty, show raw document text
+        if (!html || html === '<p></p>') {
+            html = `<pre style="white-space: pre-wrap; font-family: inherit; background: none; border: none; padding: 0;">${result.document_text || 'No document content found.'}</pre>`;
+        }
+        documentPreview.innerHTML = html;
+        // Tooltips (Bootstrap)
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('mark[title]'));
+        tooltipTriggerList.map(function (el) {
+            return new bootstrap.Tooltip(el, {placement: 'top', trigger: 'hover'});
         });
-        
-        // Display AI analysis
+        // Sidebar: Populate missing and improper fields
+        const missingFieldsList = document.getElementById('missingFields');
+        const improperFieldsList = document.getElementById('improperFields');
+        missingFieldsList.innerHTML = '';
+        improperFieldsList.innerHTML = '';
+        let sidebarMissingId = 0;
+        result.missing_fields.forEach(field => {
+            if (typeof field === 'string') field = { name: field };
+            const id = `missing-${sidebarMissingId++}`;
+            const fieldName = field.name || '';
+            const fieldDesc = field.description || '';
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex align-items-center';
+            li.innerHTML = `<span class="me-2">⚠️</span> <span class="issue-link" data-issue-id="${id}">${fieldName}</span> <span class="ms-2 text-muted small">${fieldDesc}</span>`;
+            li.querySelector('.issue-link').onclick = function() {
+                scrollToHighlight(id);
+            };
+            missingFieldsList.appendChild(li);
+        });
+        let sidebarImproperId = 0;
+        result.improper_fields.forEach(field => {
+            if (typeof field === 'string') field = { field: field };
+            const id = `improper-${sidebarImproperId++}`;
+            const fieldName = field.field || '';
+            const fieldDesc = field.reason || '';
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex align-items-center';
+            li.innerHTML = `<span class="me-2">❌</span> <span class="issue-link" data-issue-id="${id}">${fieldName}</span> <span class="ms-2 text-muted small">${fieldDesc}</span>`;
+            li.querySelector('.issue-link').onclick = function() {
+                scrollToHighlight(id);
+            };
+            improperFieldsList.appendChild(li);
+        });
+        // Field View: List all issues
+        const fieldViewList = document.getElementById('fieldViewList');
+        fieldViewList.innerHTML = '';
+        highlights.slice().reverse().forEach(h => {
+            const li = document.createElement('li');
+            li.className = `list-group-item d-flex align-items-center ${h.type === 'missing-field' ? 'list-group-item-warning' : 'list-group-item-danger'}`;
+            li.innerHTML = `<span class="me-2">${h.type === 'missing-field' ? '⚠️' : '❌'}</span> <span class="issue-link" data-issue-id="${h.id}">${h.name}</span> <span class="ms-2 text-muted small">${h.reason}</span>`;
+            li.querySelector('.issue-link').onclick = function() {
+                toggleDocView.click();
+                scrollToHighlight(h.id);
+            };
+            fieldViewList.appendChild(li);
+        });
+        // AI Analysis
         if (result.analysis) {
             document.getElementById('aiAnalysis').innerHTML = `
-                <div class="analysis-section mb-3">
-                    <h6 class="section-title">
-                        <i class="fas fa-robot me-2"></i>
-                        AI Analysis
-                    </h6>
-                    <div class="analysis-content">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">AI Analysis</h6>
+                    </div>
+                    <div class="card-body">
                         <p class="mb-0">${result.analysis}</p>
                     </div>
                 </div>
             `;
         }
-        
-        // Display missing fields
-        if (result.missing_fields && result.missing_fields.length > 0) {
-            document.getElementById('missingFields').innerHTML = `
-                <ul class="list-group">
-                    ${result.missing_fields.map(field => `
-                        <li class="list-group-item list-group-item-warning">
-                            <div class="d-flex align-items-center">
-                                <span class="field-tag missing">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>
-                                    Missing
-                                </span>
-                                <div class="flex-grow-1">
-                                    <strong>${field.name}</strong>
-                                    ${field.description ? `<br><small class="text-muted">${field.description}</small>` : ''}
-                                </div>
-                                ${field.start !== undefined ? `
-                                    <button class="scroll-to-field" onclick="scrollToField('missing-${field.start}')">
-                                        <i class="fas fa-arrow-right"></i>
-                                    </button>
-                                ` : ''}
-                            </div>
-                        </li>
-                    `).join('')}
-                </ul>
-            `;
-        }
-        
-        // Display improper fields
-        if (result.improper_fields && result.improper_fields.length > 0) {
-            document.getElementById('improperFields').innerHTML = `
-                <ul class="list-group">
-                    ${result.improper_fields.map(field => `
-                        <li class="list-group-item list-group-item-danger">
-                            <div class="d-flex align-items-center">
-                                <span class="field-tag improper">
-                                    <i class="fas fa-exclamation-circle me-1"></i>
-                                    Improper
-                                </span>
-                                <div class="flex-grow-1">
-                                    <strong>${field.field}</strong>
-                                    ${field.reason ? `<br><small class="text-muted">${field.reason}</small>` : ''}
-                                </div>
-                                ${field.start !== undefined ? `
-                                    <button class="scroll-to-field" onclick="scrollToField('improper-${field.start}')">
-                                        <i class="fas fa-arrow-right"></i>
-                                    </button>
-                                ` : ''}
-                            </div>
-                        </li>
-                    `).join('')}
-                </ul>
-            `;
-        }
-        
-        // Display filled fields
-        if (result.filled_fields && result.filled_fields.length > 0) {
-            document.getElementById('filledFields').innerHTML = `
-                <ul class="list-group">
-                    ${result.filled_fields.map(field => `
-                        <li class="list-group-item list-group-item-success">
-                            <div class="d-flex align-items-center">
-                                <span class="field-tag filled">
-                                    <i class="fas fa-check-circle me-1"></i>
-                                    Filled
-                                </span>
-                                <div class="flex-grow-1">
-                                    <strong>${field.name}</strong>
-                                    ${field.value ? `<br><small class="text-muted">${field.value}</small>` : ''}
-                                </div>
-                                ${field.start !== undefined ? `
-                                    <button class="scroll-to-field" onclick="scrollToField('filled-${field.start}')">
-                                        <i class="fas fa-arrow-right"></i>
-                                    </button>
-                                ` : ''}
-                            </div>
-                        </li>
-                    `).join('')}
-                </ul>
-            `;
-        }
-        
-        // Add filter buttons
-        const filterButtons = document.createElement('div');
-        filterButtons.className = 'filter-buttons';
-        filterButtons.innerHTML = `
-            <button class="btn btn-outline-warning active" data-filter="all">All Fields</button>
-            <button class="btn btn-outline-warning" data-filter="missing">Missing Fields</button>
-            <button class="btn btn-outline-danger" data-filter="improper">Improper Fields</button>
-            <button class="btn btn-outline-success" data-filter="filled">Filled Fields</button>
-        `;
-        document.querySelector('.card-header').appendChild(filterButtons);
-        
-        // Handle filter buttons
-        document.querySelectorAll('.filter-buttons .btn').forEach(button => {
-            button.addEventListener('click', function() {
-                const filter = this.dataset.filter;
-                document.querySelectorAll('.filter-buttons .btn').forEach(btn => btn.classList.remove('active'));
-                this.classList.add('active');
-                
-                // Show/hide highlights based on filter
-                document.querySelectorAll('.highlight').forEach(highlight => {
-                    if (filter === 'all' || highlight.classList.contains(filter)) {
-                        highlight.style.display = 'inline';
-                    } else {
-                        highlight.style.display = 'none';
-                    }
-                });
-                
-                // Show/hide analysis items based on filter
-                document.querySelectorAll('.analysis-section').forEach(section => {
-                    const type = section.id.replace('Fields', '').toLowerCase();
-                    if (filter === 'all' || type === filter) {
-                        section.style.display = 'block';
-                    } else {
-                        section.style.display = 'none';
-                    }
-                });
-            });
-        });
-        
     } catch (error) {
         console.error('Error:', error);
         document.getElementById('scanResults').style.display = 'block';
@@ -518,30 +338,19 @@ document.getElementById('documentScannerForm').addEventListener('submit', async 
             </div>
         `;
     } finally {
-        // Hide loading spinner
         spinner.classList.add('d-none');
         submitButton.disabled = false;
     }
 });
 
-// Function to scroll to a highlighted field
-function scrollToField(fieldId) {
-    const field = document.querySelector(`[data-field-id="${fieldId}"]`);
-    if (field) {
-        field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        field.style.animation = 'highlight-pulse 2s';
+// Scroll to the corresponding highlight in the document preview
+function scrollToHighlight(issueId) {
+    const el = document.querySelector(`mark[data-issue-id='${issueId}']`);
+    if (el) {
+        el.scrollIntoView({behavior: 'smooth', block: 'center'});
+        el.classList.add('highlighted-issue');
+        setTimeout(() => el.classList.remove('highlighted-issue'), 1500);
     }
 }
-
-// Add highlight pulse animation
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes highlight-pulse {
-        0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
-        70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
-    }
-`;
-document.head.appendChild(style);
 </script>
 {% endblock %} 
