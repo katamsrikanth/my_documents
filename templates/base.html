@@ -159,6 +159,56 @@
             border-color: rgba(255, 255, 255, 0.1);
             margin: 0.5rem 0;
         }
+        
+        /* Notifications dropdown specific styles */
+        #notificationsDropdown + .dropdown-menu {
+            background: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            min-width: 320px;
+            max-width: 400px;
+            padding: 1rem;
+        }
+        
+        #notificationsDropdown + .dropdown-menu .dropdown-item {
+            color: #333333 !important;
+        }
+        
+        #notificationsDropdown + .dropdown-menu .dropdown-item:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+        
+        #notificationsDropdown + .dropdown-menu .dropdown-divider {
+            border-color: rgba(0, 0, 0, 0.1);
+        }
+        
+        .dropdown-header {
+            color: #666666;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            margin-bottom: 0.5rem;
+        }
+        
+        #notificationsList {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        #notificationsList .mb-2 {
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            transition: background-color 0.2s ease;
+        }
+        
+        #notificationsList .mb-2:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        
+        #notificationsList hr {
+            margin: 0.5rem 0;
+            opacity: 0.1;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>

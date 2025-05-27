@@ -140,8 +140,8 @@ class Case:
         collection = Case.get_collection()
         # Delete associated documents from storage
         case = Case.get_by_id(case_id)
-        if case and 'documents' in case:
-            for doc in case['documents']:
+        if case and hasattr(case, 'documents') and case.documents:
+            for doc in case.documents:
                 doc_path = os.path.join('/Users/srikanthkatam/Documents/srikanth/Apps/legal_storage/case_documents', doc['filename'])
                 if os.path.exists(doc_path):
                     os.remove(doc_path)

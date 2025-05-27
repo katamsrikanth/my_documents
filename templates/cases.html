@@ -328,7 +328,7 @@ $(document).ready(function() {
     });
 
     // Delete case
-    $('.delete-case').on('click', function() {
+    $(document).on('click', '.delete-case', function() {
         var caseId = $(this).data('case-id');
         if (confirm('Are you sure you want to delete this case? This action cannot be undone.')) {
             $.ajax({

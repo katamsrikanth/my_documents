@@ -3,6 +3,7 @@ from bson import ObjectId
 import uuid
 from models.user import User
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +78,20 @@ class Client:
     def get_by_id(cls, client_id):
         """Get a client by ID."""
         try:
+            logger.debug(f"Looking up client with ID: {client_id}")
+            if not client_id:
+                logger.error("No client_id provided")
+                return None
+                
             client_data = User.db.clients.find_one({'client_id': client_id})
             if client_data:
+                logger.debug(f"Found client: {client_data.get('first_name')} {client_data.get('last_name')}")
                 return cls.from_dict(client_data)
+            logger.error(f"No client found with ID: {client_id}")
             return None
         except Exception as e:
             logger.error(f"Error getting client by ID: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
             return None
 
     @classmethod
@@ -90,7 +99,7 @@ class Client:
         """Get all clients."""
         try:
             clients = []
-            for client_data in User.db.clients.find():
+            for client_data in User.db.clients.find().sort([('first_name', 1), ('last_name', 1)]):
                 client = cls.from_dict(client_data)
                 clients.append(client)
             return clients
@@ -108,10 +117,11 @@ class Client:
             {'$set': client_data}
         )
 
-    def delete(self, db=None):
-        """Delete the client from the database."""
+    @classmethod
+    def delete(cls, client_id, db=None):
+        """Delete the client from the database by client_id."""
         db = db or User.db
-        db.clients.delete_one({'client_id': self.client_id})
+        return db.clients.delete_one({'client_id': client_id})
 
     @staticmethod
     def create_collection():

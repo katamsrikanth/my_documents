@@ -2879,35 +2879,79 @@ def add_case_page():
             'updated_at': datetime.utcnow()
         }
         
+        logger.debug("Processed case data: %s", case_data)
+        
         # Validate required fields
         required_fields = ['client_id', 'title', 'case_type', 'case_number', 'status', 'start_date', 'priority']
         missing_fields = [field for field in required_fields if not case_data.get(field)]
         if missing_fields:
-            flash(f'Missing required fields: {", ".join(missing_fields)}', 'error')
-            return redirect(url_for('add_case_page'))
+            error_msg = f'Missing required fields: {", ".join(missing_fields)}'
+            logger.error(error_msg)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': error_msg}), 400
+            else:
+                flash(error_msg, 'error')
+                return redirect(url_for('add_case_page'))
         
         # Get client data using client_id (UUID)
+        logger.debug("Looking up client with ID: %s", case_data['client_id'])
         client = Client.get_by_id(case_data['client_id'])
         if not client:
-            flash('Client not found', 'error')
-            return redirect(url_for('add_case_page'))
+            error_msg = f'Client not found with ID: {case_data["client_id"]}'
+            logger.error(error_msg)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': error_msg}), 404
+            else:
+                flash(error_msg, 'error')
+                return redirect(url_for('add_case_page'))
             
         # Add client name to case data
-        client_data = client.to_dict()
-        case_data['client_name'] = f"{client_data['first_name']} {client_data['last_name']}"
+        try:
+            client_data = client.to_dict()
+            case_data['client_name'] = f"{client_data['first_name']} {client_data['last_name']}"
+            logger.debug("Added client name to case data: %s", case_data['client_name'])
+        except Exception as e:
+            error_msg = f'Error getting client data: {str(e)}'
+            logger.error(error_msg)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': error_msg}), 500
+            else:
+                flash(error_msg, 'error')
+                return redirect(url_for('add_case_page'))
         
         # Create case using the Case model
-        case = Case(**case_data)
-        case.save()
-        
-        flash('Case added successfully!', 'success')
-        return redirect(url_for('cases'))
+        try:
+            logger.debug("Creating new case with data: %s", case_data)
+            case = Case(**case_data)
+            case.save()
+            logger.debug("Case saved successfully with ID: %s", case._id)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'message': 'Case added successfully',
+                    'case_id': case._id
+                })
+            else:
+                flash('Case added successfully!', 'success')
+                return redirect(url_for('cases'))
+        except Exception as e:
+            error_msg = f'Error saving case: {str(e)}'
+            logger.error(error_msg)
+            logger.error("Stack trace: %s", traceback.format_exc())
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'error': error_msg}), 500
+            else:
+                flash(error_msg, 'error')
+                return redirect(url_for('add_case_page'))
         
     except Exception as e:
-        logger.error(f"Error adding case: {str(e)}")
-        logger.error(f"Stack trace: {traceback.format_exc()}")
-        flash(f'Error adding case: {str(e)}', 'error')
-        return redirect(url_for('add_case_page'))
+        error_msg = f'Error adding case: {str(e)}'
+        logger.error(error_msg)
+        logger.error("Stack trace: %s", traceback.format_exc())
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': error_msg}), 500
+        else:
+            flash(error_msg, 'error')
+            return redirect(url_for('add_case_page'))
 
 @app.route('/case/<case_id>')
 @login_required
