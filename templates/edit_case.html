@@ -178,6 +178,55 @@
                     </div>
                 </div>
                 
+                <!-- Attorney Assignment Section -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Assigned Attorneys</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Current Attorneys -->
+                        <div class="mb-3">
+                            <h6>Current Attorneys</h6>
+                            <div id="currentAttorneys" class="list-group mb-3">
+                                {% if case and case.attorneys %}
+                                    {% for attorney in case.attorneys %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center" data-attorney-id="{{ attorney._id }}">
+                                        <div>
+                                            <strong>{{ attorney.name }}</strong>
+                                            <small class="text-muted d-block">{{ attorney.specialization }}</small>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-danger remove-attorney" data-attorney-id="{{ attorney._id }}">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="text-muted">No attorneys assigned</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Add New Attorney -->
+                        <div class="mb-3">
+                            <h6>Add Attorney</h6>
+                            <div class="input-group">
+                                <select class="form-select" id="attorneySelect">
+                                    <option value="">Select an attorney...</option>
+                                    {% for attorney in available_attorneys %}
+                                        <option value="{{ attorney._id }}">{{ attorney.name }} ({{ attorney.specialization }})</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-primary" id="addAttorney">
+                                    <i class="fas fa-plus"></i> Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hidden input for attorney IDs -->
+                <input type="hidden" name="attorney_ids" id="attorneyIds" value="{{ case.attorney_ids|join(',') if case and case.attorney_ids else '' }}">
+
                 <div class="d-flex justify-content-end gap-2 mt-4">
                     <a href="{{ url_for('cases') }}" class="btn btn-secondary">Cancel</a>
                     <button type="submit" class="btn btn-primary">Update Case</button>
@@ -403,6 +452,92 @@ document.getElementById('visitNotes').addEventListener('input', function() {
 
 document.getElementById('editVisitNotes').addEventListener('input', function() {
     document.getElementById('editCharCount').textContent = this.value.length;
+});
+
+// Attorney Assignment Functions
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize attorney IDs array from hidden input
+    let attorneyIds = document.getElementById('attorneyIds').value ? 
+        document.getElementById('attorneyIds').value.split(',') : [];
+
+    // Function to update hidden input with current attorney IDs
+    function updateAttorneyIds() {
+        document.getElementById('attorneyIds').value = attorneyIds.join(',');
+    }
+
+    // Add attorney
+    document.getElementById('addAttorney').addEventListener('click', function() {
+        const select = document.getElementById('attorneySelect');
+        const attorneyId = select.value;
+        
+        if (!attorneyId) {
+            alert('Please select an attorney');
+            return;
+        }
+
+        if (attorneyIds.includes(attorneyId)) {
+            alert('This attorney is already assigned to the case');
+            return;
+        }
+
+        // Add to array
+        attorneyIds.push(attorneyId);
+
+        // Create new list item
+        const attorney = select.options[select.selectedIndex];
+        const attorneyName = attorney.text.split(' (')[0];
+        const specialization = attorney.text.match(/\((.*?)\)/)[1];
+
+        const listItem = document.createElement('div');
+        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+        listItem.dataset.attorneyId = attorneyId;
+        listItem.innerHTML = `
+            <div>
+                <strong>${attorneyName}</strong>
+                <small class="text-muted d-block">${specialization}</small>
+            </div>
+            <button type="button" class="btn btn-sm btn-danger remove-attorney" data-attorney-id="${attorneyId}">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+
+        // Add to list
+        document.getElementById('currentAttorneys').appendChild(listItem);
+
+        // Reset select
+        select.value = '';
+
+        // Update hidden input
+        updateAttorneyIds();
+
+        // Add event listener to new remove button
+        listItem.querySelector('.remove-attorney').addEventListener('click', function() {
+            removeAttorney(attorneyId);
+        });
+    });
+
+    // Remove attorney
+    function removeAttorney(attorneyId) {
+        // Remove from array
+        attorneyIds = attorneyIds.filter(id => id !== attorneyId);
+
+        // Remove from DOM
+        const listItem = document.querySelector(`[data-attorney-id="${attorneyId}"]`);
+        if (listItem) {
+            listItem.remove();
+        }
+
+        // Update hidden input
+        updateAttorneyIds();
+    }
+
+    // Add event listeners to existing remove buttons
+    document.querySelectorAll('.remove-attorney').forEach(button => {
+        button.addEventListener('click', function() {
+            const attorneyId = this.dataset.attorneyId;
+            removeAttorney(attorneyId);
+        });
+    });
 });
 </script>
 {% endblock %} 

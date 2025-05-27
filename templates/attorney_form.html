@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>{{ 'Edit Attorney' if attorney else 'Add Attorney' }}</h2>
+    <form method="post" action="{{ url_for('edit_attorney', attorney_id=attorney._id) if attorney else url_for('new_attorney') }}">
+        <div class="mb-3">
+            <label for="name" class="form-label">Name</label>
+            <input type="text" class="form-control" id="name" name="name" required value="{{ attorney.name if attorney else '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="email" class="form-label">Email</label>
+            <input type="email" class="form-control" id="email" name="email" required value="{{ attorney.email if attorney else '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="phone" class="form-label">Phone</label>
+            <input type="text" class="form-control" id="phone" name="phone" required value="{{ attorney.phone if attorney else '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="specialization" class="form-label">Specialization</label>
+            <input type="text" class="form-control" id="specialization" name="specialization" required value="{{ attorney.specialization if attorney else '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="bar_number" class="form-label">Bar Number</label>
+            <input type="text" class="form-control" id="bar_number" name="bar_number" required value="{{ attorney.bar_number if attorney else '' }}">
+        </div>
+        <div class="mb-3">
+            <label for="status" class="form-label">Status</label>
+            <select class="form-select" id="status" name="status">
+                <option value="Active" {% if attorney and attorney.status == 'Active' %}selected{% endif %}>Active</option>
+                <option value="Inactive" {% if attorney and attorney.status == 'Inactive' %}selected{% endif %}>Inactive</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">{{ 'Update' if attorney else 'Add' }} Attorney</button>
+        <a href="{{ url_for('list_attorneys') }}" class="btn btn-secondary ms-2">Cancel</a>
+    </form>
+</div>
+{% endblock %} 

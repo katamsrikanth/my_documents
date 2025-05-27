@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>{{ attorney.name }}</h2>
+    <div class="mb-3">
+        <strong>Bar Number:</strong> {{ attorney.bar_number }}<br>
+        <strong>Specialization:</strong> {{ attorney.specialization }}<br>
+        <strong>Status:</strong> {{ attorney.status }}<br>
+        <strong>Email:</strong> {{ attorney.email }}<br>
+        <strong>Phone:</strong> {{ attorney.phone }}<br>
+    </div>
+    <a href="/attorney/{{ attorney._id }}/edit" class="btn btn-primary">Edit</a>
+    <form action="/attorney/{{ attorney._id }}/delete" method="post" style="display:inline;" onsubmit="return confirm('Are you sure?');">
+        <button type="submit" class="btn btn-danger">Delete</button>
+    </form>
+    <a href="/attorney/{{ attorney._id }}/feedback" class="btn btn-success">Public Feedback Link</a>
+    <hr>
+    <h4>Client Testimonials</h4>
+    {% for fb in feedback %}
+        <div class="card mb-2">
+            <div class="card-body">
+                <strong>{{ fb.client_name }}</strong> ({{ fb.rating or 'No rating' }})<br>
+                <span>{{ fb.feedback }}</span>
+                <div class="text-muted small">{{ fb.timestamp.strftime('%Y-%m-%d') if fb.timestamp else '' }}</div>
+                {% if not fb.approved %}
+                <form action="/attorney/feedback/{{ fb._id }}/approve" method="post" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-warning">Approve</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    {% else %}
+        <p>No feedback yet.</p>
+    {% endfor %}
+    <hr>
+    <h4>Association History</h4>
+    <ul>
+        {% for h in history %}
+        <li>{{ h.timestamp.strftime('%Y-%m-%d %H:%M') if h.timestamp else '' }}: {{ h.action }} (Case: {{ h.case_id }}) {% if h.user %}by {{ h.user }}{% endif %}</li>
+        {% else %}
+        <li>No history.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %} 

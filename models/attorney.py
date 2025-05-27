@@ -80,4 +80,30 @@ class Attorney(BaseModel):
     @classmethod
     def delete(cls, attorney_id):
         """Delete an attorney."""
-        return cls.db[cls.collection_name].delete_one({'_id': ObjectId(attorney_id)}) 
+        if not cls.can_delete(attorney_id):
+            raise Exception('Cannot delete attorney: still associated with cases.')
+        return cls.db[cls.collection_name].delete_one({'_id': ObjectId(attorney_id)})
+
+    def to_dict(self):
+        return {
+            '_id': str(getattr(self, '_id', '')),
+            'name': self.name,
+            'email': self.email,
+            'phone': self.phone,
+            'specialization': self.specialization,
+            'bar_number': self.bar_number,
+            'status': self.status,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
+    @classmethod
+    def get_by_bar_number(cls, bar_number):
+        return cls.db[cls.collection_name].find_one({'bar_number': bar_number})
+
+    @classmethod
+    def can_delete(cls, attorney_id):
+        # Prevent deletion if associated with any case
+        from models.case import Case
+        cases = Case.get_collection().find({'attorney_ids': attorney_id})
+        return cases.count() == 0 

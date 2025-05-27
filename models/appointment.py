@@ -3,13 +3,14 @@ import uuid
 from models.user import User
 
 class Appointment:
-    def __init__(self, case_id, date_time, location, purpose, status="Scheduled"):
+    def __init__(self, case_id, date_time, location, purpose, status="Scheduled", attorney_id=None):
         self.appointment_id = str(uuid.uuid4())
         self.case_id = case_id
         self.date_time = date_time
         self.location = location
         self.purpose = purpose
         self.status = status
+        self.attorney_id = attorney_id
         self.created_at = datetime.utcnow()
         self.updated_at = datetime.utcnow()
 
@@ -36,6 +37,7 @@ class Appointment:
             'location': self.location,
             'purpose': self.purpose,
             'status': self.status,
+            'attorney_id': self.attorney_id,
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }

@@ -269,6 +269,11 @@
                                 </a>
                             </li>
                             <li>
+                                <a class="dropdown-item" href="{{ url_for('list_attorneys') }}">
+                                    <i class="fas fa-user-tie me-2"></i>Attorneys
+                                </a>
+                            </li>
+                            <li>
                                 <a class="dropdown-item {% if request.path == '/appointments' %}active{% endif %}" href="/appointments">
                                     <i class="fas fa-calendar-alt me-2"></i>Appointments
                                 </a>
@@ -303,6 +308,8 @@
                             </li>
                         </ul>
                     </li>
+                    <!-- Mega Menu Dropdown -->
+                    
                 </ul>
 
                 <!-- User Authentication Menu -->

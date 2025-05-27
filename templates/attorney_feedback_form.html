@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Attorney Feedback Form</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('submit_attorney_feedback', attorney_id=attorney_id) }}">
+                        <input type="hidden" name="attorney_id" value="{{ attorney_id }}">
+                        
+                        <div class="mb-3">
+                            <label for="rating" class="form-label">Rating</label>
+                            <select class="form-select" id="rating" name="rating" required>
+                                <option value="">Select a rating</option>
+                                <option value="5">Excellent (5)</option>
+                                <option value="4">Very Good (4)</option>
+                                <option value="3">Good (3)</option>
+                                <option value="2">Fair (2)</option>
+                                <option value="1">Poor (1)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="feedback" class="form-label">Feedback</label>
+                            <textarea class="form-control" id="feedback" name="feedback" rows="4" required></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="strengths" class="form-label">Strengths</label>
+                            <textarea class="form-control" id="strengths" name="strengths" rows="3"></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="areas_for_improvement" class="form-label">Areas for Improvement</label>
+                            <textarea class="form-control" id="areas_for_improvement" name="areas_for_improvement" rows="3"></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="recommendation" class="form-label">Would you recommend this attorney?</label>
+                            <select class="form-select" id="recommendation" name="recommendation" required>
+                                <option value="">Select an option</option>
+                                <option value="yes">Yes</option>
+                                <option value="no">No</option>
+                                <option value="maybe">Maybe</option>
+                            </select>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Submit Feedback</button>
+                            <a href="{{ url_for('list_attorneys') }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

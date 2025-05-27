@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Attorneys</h2>
+        <a href="/attorney/new" class="btn btn-primary">Add Attorney</a>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Bar Number</th>
+                        <th>Specialization</th>
+                        <th>Status</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for attorney in attorneys %}
+                    <tr>
+                        <td>{{ attorney.name }}</td>
+                        <td>{{ attorney.bar_number }}</td>
+                        <td>{{ attorney.specialization }}</td>
+                        <td>{{ attorney.status }}</td>
+                        <td>{{ attorney.email }}</td>
+                        <td>{{ attorney.phone }}</td>
+                        <td>
+                            <a href="/attorney/{{ attorney._id }}" class="btn btn-sm btn-info">View</a>
+                            <a href="/attorney/{{ attorney._id }}/edit" class="btn btn-sm btn-primary">Edit</a>
+                            <form action="/attorney/{{ attorney._id }}/delete" method="post" style="display:inline;" onsubmit="return confirm('Are you sure?');">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %} 

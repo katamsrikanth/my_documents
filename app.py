@@ -36,6 +36,8 @@ from bson import ObjectId  # Add this import at the top if not present
 import uuid
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from models.attorney_case_history import AttorneyCaseHistory
+from models.attorney_feedback import AttorneyFeedback
 
 # Load environment variables
 load_dotenv()
@@ -3310,6 +3312,24 @@ def edit_case(case_id):
                 if end_date:
                     case.end_date = datetime.strptime(end_date, '%Y-%m-%d')
                 
+                # Handle attorney assignments
+                attorney_ids = request.form.get('attorney_ids', '').split(',')
+                attorney_ids = [id for id in attorney_ids if id]  # Remove empty strings
+                
+                # Get current attorney IDs
+                current_attorney_ids = case.attorney_ids or []
+                
+                # Find attorneys to add and remove
+                attorneys_to_add = set(attorney_ids) - set(current_attorney_ids)
+                attorneys_to_remove = set(current_attorney_ids) - set(attorney_ids)
+                
+                # Update attorney associations
+                for attorney_id in attorneys_to_add:
+                    case.associate_attorney(attorney_id, session.get('username'))
+                
+                for attorney_id in attorneys_to_remove:
+                    case.deassociate_attorney(attorney_id, session.get('username'))
+                
                 logger.debug(f"Updating case with new data - Title: {case.title}, Status: {case.status}")
                 case.save()
                 logger.debug("Case updated successfully")
@@ -3323,8 +3343,15 @@ def edit_case(case_id):
 
         # Get all clients for the dropdown
         clients = Client.get_all()
+        
+        # Get all active attorneys for the dropdown
+        available_attorneys = Attorney.get_active()
+        
         logger.debug("Rendering edit case form")
-        return render_template('edit_case.html', case=case, clients=clients)
+        return render_template('edit_case.html', 
+                             case=case, 
+                             clients=clients,
+                             available_attorneys=available_attorneys)
     except Exception as e:
         logger.error(f"Error in edit case route: {str(e)}")
         flash(f'Error: {str(e)}', 'error')
@@ -3947,6 +3974,192 @@ def api_case_analyzer():
     except Exception as e:
         logger.error(f'Error in case analyzer: {str(e)}')
         return jsonify({'success': False, 'error': str(e)})
+
+# --- Attorney CRUD ---
+@app.route('/attorneys', methods=['GET'])
+@login_required
+def list_attorneys():
+    attorneys = Attorney.get_all()
+    return render_template('attorneys.html', attorneys=attorneys)
+
+@app.route('/attorney/<attorney_id>', methods=['GET'])
+@login_required
+def get_attorney(attorney_id):
+    attorney = Attorney.get_by_id(attorney_id)
+    if not attorney:
+        return jsonify({'error': 'Attorney not found'}), 404
+    feedback = AttorneyFeedback.get_feedback_for_attorney(attorney_id)
+    history = AttorneyCaseHistory.get_history_for_attorney(attorney_id)
+    return render_template('attorney_detail.html', attorney=attorney, feedback=feedback, history=history)
+
+@app.route('/attorney', methods=['POST'])
+@login_required
+def create_attorney():
+    data = request.form
+    attorney = Attorney(
+        name=data.get('name'),
+        email=data.get('email'),
+        phone=data.get('phone'),
+        specialization=data.get('specialization'),
+        bar_number=data.get('bar_number'),
+        status=data.get('status', 'Active')
+    )
+    attorney.save()
+    return redirect(url_for('list_attorneys'))
+
+@app.route('/attorney/<attorney_id>', methods=['POST'])
+@login_required
+def update_attorney(attorney_id):
+    data = request.form
+    update_data = {k: v for k, v in data.items() if k in ['name', 'email', 'phone', 'specialization', 'bar_number', 'status']}
+    Attorney.update(attorney_id, update_data)
+    return redirect(url_for('get_attorney', attorney_id=attorney_id))
+
+@app.route('/attorney/<attorney_id>/delete', methods=['POST'])
+@login_required
+def delete_attorney(attorney_id):
+    try:
+        Attorney.delete(attorney_id)
+        return redirect(url_for('list_attorneys'))
+    except Exception as e:
+        flash(str(e), 'error')
+        return redirect(url_for('get_attorney', attorney_id=attorney_id))
+
+# --- Attorney-Case Association ---
+@app.route('/case/<case_id>/attorneys', methods=['POST'])
+@login_required
+def associate_attorneys_to_case(case_id):
+    case = Case.get_by_id(case_id)
+    if not case:
+        return jsonify({'error': 'Case not found'}), 404
+    attorney_ids = request.form.getlist('attorney_ids')
+    user = session.get('username')
+    # Only allow active attorneys
+    active_attorneys = [a['_id'] for a in Attorney.get_active()]
+    for aid in attorney_ids:
+        if aid in active_attorneys:
+            case.associate_attorney(aid, user)
+    # Remove de-associated attorneys
+    for aid in list(case.attorney_ids):
+        if aid not in attorney_ids:
+            case.deassociate_attorney(aid, user)
+    return redirect(url_for('edit_case', case_id=case_id))
+
+# --- Attorney Feedback (Public) ---
+@app.route('/attorney/<attorney_id>/feedback', methods=['GET', 'POST'])
+def submit_attorney_feedback(attorney_id):
+    if request.method == 'GET':
+        return render_template('attorney_feedback_form.html', attorney_id=attorney_id)
+    data = request.form
+    AttorneyFeedback.submit_feedback(
+        attorney_id=attorney_id,
+        client_name=data.get('client_name'),
+        feedback=data.get('feedback'),
+        rating=data.get('rating')
+    )
+    return render_template('attorney_feedback_thankyou.html')
+
+# --- Approve Feedback (Admin) ---
+@app.route('/attorney/feedback/<feedback_id>/approve', methods=['POST'])
+@login_required
+def approve_attorney_feedback(feedback_id):
+    AttorneyFeedback.approve_feedback(feedback_id)
+    flash('Feedback approved!', 'success')
+    return redirect(request.referrer or url_for('list_attorneys'))
+
+# --- Attorney-Case History (Audit) ---
+@app.route('/case/<case_id>/attorney_history')
+@login_required
+def case_attorney_history(case_id):
+    history = AttorneyCaseHistory.get_history_for_case(case_id)
+    return render_template('case_attorney_history.html', history=history)
+
+# --- API for active attorneys for a case (for appointment dropdown) ---
+@app.route('/case/<case_id>/active_attorneys')
+@login_required
+def get_active_attorneys_for_case(case_id):
+    case = Case.get_by_id(case_id)
+    if not case:
+        return jsonify([])
+    active_attorneys = [a for a in Attorney.get_active() if str(a['_id']) in case.attorney_ids]
+    return jsonify([{'_id': str(a['_id']), 'name': a['name']} for a in active_attorneys])
+
+# --- API for all active attorneys (for appointment creation) ---
+@app.route('/attorneys/active')
+@login_required
+def get_all_active_attorneys():
+    attorneys = Attorney.get_active()
+    return jsonify([{'_id': str(a['_id']), 'name': a['name']} for a in attorneys])
+
+# --- Attorney Create/Edit Form ---
+@app.route('/attorney/new', methods=['GET', 'POST'])
+@login_required
+def new_attorney():
+    if request.method == 'POST':
+        data = request.form
+        attorney = Attorney(
+            name=data.get('name'),
+            email=data.get('email'),
+            phone=data.get('phone'),
+            specialization=data.get('specialization'),
+            bar_number=data.get('bar_number'),
+            status=data.get('status', 'Active')
+        )
+        attorney.save()
+        return redirect(url_for('list_attorneys'))
+    return render_template('attorney_form.html', attorney=None)
+
+@app.route('/attorney/<attorney_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_attorney(attorney_id):
+    attorney = Attorney.get_by_id(attorney_id)
+    if not attorney:
+        flash('Attorney not found', 'error')
+        return redirect(url_for('list_attorneys'))
+    if request.method == 'POST':
+        data = request.form
+        update_data = {k: v for k, v in data.items() if k in ['name', 'email', 'phone', 'specialization', 'bar_number', 'status']}
+        Attorney.update(attorney_id, update_data)
+        return redirect(url_for('get_attorney', attorney_id=attorney_id))
+    return render_template('attorney_form.html', attorney=attorney)
+
+
+# --- Update Appointment Create/Edit to Provide Attorneys ---
+@app.route('/appointment/new', methods=['GET', 'POST'])
+@login_required
+def new_appointment():
+    cases = Case.get_all()
+    attorneys = Attorney.get_active()
+    if request.method == 'POST':
+        case_id = request.form.get('case_id')
+        date_time_str = request.form.get('date_time')
+        location = request.form.get('location')
+        purpose = request.form.get('purpose')
+        status = request.form.get('status', 'Scheduled')
+        attorney_id = request.form.get('attorney_id')
+        # Validate required fields
+        if not date_time_str or not location or not purpose or not status:
+            flash('Missing required fields', 'error')
+            return render_template('edit_appointment.html', appointment=None, cases=cases, attorneys=attorneys)
+        try:
+            date_time = datetime.strptime(date_time_str, '%Y-%m-%dT%H:%M')
+        except Exception:
+            flash('Invalid date/time format', 'error')
+            return render_template('edit_appointment.html', appointment=None, cases=cases, attorneys=attorneys)
+        appointment = Appointment(
+            case_id=case_id,
+            date_time=date_time,
+            location=location,
+            purpose=purpose,
+            status=status,
+            attorney_id=attorney_id
+        )
+        appointment.save()
+        flash('Appointment created successfully!', 'success')
+        return redirect(url_for('appointments'))
+    return render_template('edit_appointment.html', appointment=None, cases=cases, attorneys=attorneys)
+
+
 
 if __name__ == '__main__':
     try:

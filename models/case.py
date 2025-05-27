@@ -7,9 +7,18 @@ import os
 import shutil
 from werkzeug.utils import secure_filename
 import json
+from models.base import BaseModel
+from models.attorney import Attorney
+from models.attorney_case_history import AttorneyCaseHistory
+import logging
 
-class Case:
+logger = logging.getLogger(__name__)
+
+class Case(BaseModel):
+    collection_name = 'cases'
+
     def __init__(self, **kwargs):
+        # Don't call super().__init__() since BaseModel's __init__ is causing issues
         self._id = kwargs.get('_id')
         self.client_id = kwargs.get('client_id')  # Store as UUID string
         self.client_name = kwargs.get('client_name')
@@ -38,6 +47,8 @@ class Case:
         self.court_visits = kwargs.get('court_visits', [])  # List of court visits with notes
         self.created_at = kwargs.get('created_at', datetime.utcnow())
         self.updated_at = kwargs.get('updated_at', datetime.utcnow())
+        self.attorney_ids = kwargs.get('attorney_ids', [])
+        self.attorneys = kwargs.get('attorneys', [])
 
     @staticmethod
     def create_collection():
@@ -90,9 +101,9 @@ class Case:
             case['_id'] = str(case['_id'])
         return cases
 
-    @staticmethod
-    def get_by_id(case_id):
-        collection = Case.get_collection()
+    @classmethod
+    def get_by_id(cls, case_id):
+        collection = cls.get_collection()
         try:
             # Try to convert string to ObjectId if it's a valid ObjectId
             if isinstance(case_id, str):
@@ -103,7 +114,10 @@ class Case:
                     case_data = collection.find_one({'case_id': case_id})
                     if case_data:
                         case_data['_id'] = str(case_data['_id'])
-                        return Case(**case_data)
+                        case = cls(**case_data)
+                        # Load attorneys
+                        case.attorneys = [Attorney.get_by_id(str(attorney_id)) for attorney_id in case.attorney_ids if attorney_id]
+                        return case
                     return None
             
             case_data = collection.find_one({'_id': case_id})
@@ -120,7 +134,10 @@ class Case:
                         case_data['end_date'] = datetime.strptime(case_data['end_date'], '%Y-%m-%d')
                     except (ValueError, TypeError):
                         case_data['end_date'] = None
-                return Case(**case_data)
+                case = cls(**case_data)
+                # Load attorneys
+                case.attorneys = [Attorney.get_by_id(str(attorney_id)) for attorney_id in case.attorney_ids if attorney_id]
+                return case
             return None
         except Exception as e:
             logger.error(f"Error in get_by_id: {str(e)}")
@@ -288,4 +305,38 @@ class Case:
 
     def delete_court_visit(self, visit_id):
         """Delete a court visit"""
-        self.court_visits = [visit for visit in self.court_visits if visit['_id'] != visit_id] 
+        self.court_visits = [visit for visit in self.court_visits if visit['_id'] != visit_id]
+
+    def associate_attorney(self, attorney_id, user=None):
+        if attorney_id not in self.attorney_ids:
+            self.attorney_ids.append(attorney_id)
+            self.save()
+            AttorneyCaseHistory.log(self._id, attorney_id, 'associate', user)
+
+    def deassociate_attorney(self, attorney_id, user=None):
+        if attorney_id in self.attorney_ids:
+            self.attorney_ids.remove(attorney_id)
+            self.save()
+            AttorneyCaseHistory.log(self._id, attorney_id, 'deassociate', user)
+
+    def update_attorneys(self, new_attorney_ids, user=None):
+        """Update attorneys and log changes in history"""
+        old_attorney_ids = set(str(attorney._id) for attorney in self.attorneys) if self.attorneys else set()
+        new_attorney_ids = set(new_attorney_ids)
+
+        # Log removals
+        for attorney_id in old_attorney_ids - new_attorney_ids:
+            AttorneyCaseHistory.log(str(self._id), attorney_id, 'deassociate', user)
+
+        # Log additions
+        for attorney_id in new_attorney_ids - old_attorney_ids:
+            AttorneyCaseHistory.log(str(self._id), attorney_id, 'associate', user)
+
+        # Update attorneys
+        self.attorneys = [Attorney.get_by_id(attorney_id) for attorney_id in new_attorney_ids if attorney_id]
+        self.updated_at = datetime.utcnow()
+        self.save()
+
+    def get_attorney_history(self):
+        """Get the history of attorney assignments"""
+        return AttorneyCaseHistory.get_history_for_case(str(self._id)) 
