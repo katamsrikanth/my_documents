@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h3>Your Cases</h3>
+    <table class="table table-bordered table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Start Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for case in cases %}
+            <tr>
+                <td>{{ case.title }}</td>
+                <td>{{ case.case_type }}</td>
+                <td>{{ case.status }}</td>
+                <td>{{ case.start_date.strftime('%Y-%m-%d') if case.start_date else '' }}</td>
+                <td><a href="{{ url_for('client_case_detail', case_id=case._id) }}" class="btn btn-sm btn-info">View</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center">No cases found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %} 

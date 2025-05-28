@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h3>Case: {{ case.title }}</h3>
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Case Details</h5>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item"><strong>Type:</strong> {{ case.case_type }}</li>
+                <li class="list-group-item"><strong>Status:</strong> {{ case.status }}</li>
+                <li class="list-group-item"><strong>Start Date:</strong> {{ case.start_date.strftime('%Y-%m-%d') if case.start_date else '' }}</li>
+                <li class="list-group-item"><strong>End Date:</strong> {{ case.end_date.strftime('%Y-%m-%d') if case.end_date else '' }}</li>
+                <li class="list-group-item"><strong>Description:</strong> {{ case.description }}</li>
+            </ul>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Documents</h5>
+                    <ul class="list-group mb-3">
+                        {% for doc in case.documents %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ doc.filename }}
+                            <span class="text-muted small">{{ doc.uploaded_at.strftime('%Y-%m-%d %H:%M') if doc.uploaded_at else '' }}</span>
+                        </li>
+                        {% else %}
+                        <li class="list-group-item text-center">No documents uploaded.</li>
+                        {% endfor %}
+                    </ul>
+                    <form id="uploadForm" enctype="multipart/form-data" data-case-id="{{ case._id }}">
+                        <div class="mb-2">
+                            <input type="file" name="document" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm">Upload Document</button>
+                        <div id="uploadStatus" class="mt-2"></div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Messages with Case Manager</h5>
+                    <div id="messagesBox" style="height: 250px; overflow-y: auto; background: #f8f9fa; border-radius: 5px; padding: 10px; margin-bottom: 10px;"></div>
+                    <form id="messageForm" data-case-id="{{ case._id }}">
+                        <div class="input-group">
+                            <input type="text" name="message" class="form-control" placeholder="Type your message..." required>
+                            <button class="btn btn-success" type="submit">Send</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+// Document upload
+$('#uploadForm').on('submit', function(e) {
+    e.preventDefault();
+    var formData = new FormData(this);
+    var caseId = $(this).data('case-id');
+    $.ajax({
+        url: '/client/case/' + caseId + '/upload',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(resp) {
+            $('#uploadStatus').html('<span class="text-success">Upload successful!</span>');
+            setTimeout(function(){ location.reload(); }, 1000);
+        },
+        error: function(xhr) {
+            $('#uploadStatus').html('<span class="text-danger">Upload failed: ' + xhr.responseJSON.error + '</span>');
+        }
+    });
+});
+// Messaging
+function loadMessages() {
+    var caseId = $('#messageForm').data('case-id');
+    $.getJSON('/client/case/' + caseId + '/messages', function(data) {
+        var box = $('#messagesBox');
+        box.empty();
+        data.messages.forEach(function(msg) {
+            var align = msg.sender === 'client' ? 'text-end' : 'text-start';
+            var sender = msg.sender === 'client' ? 'You' : 'Case Manager';
+            box.append('<div class="mb-2 ' + align + '"><span class="fw-bold">' + sender + ':</span> ' + msg.message + '<br><span class="text-muted small">' + msg.timestamp + '</span></div>');
+        });
+        box.scrollTop(box[0].scrollHeight);
+    });
+}
+$('#messageForm').on('submit', function(e) {
+    e.preventDefault();
+    var msg = $(this).find('input[name="message"]').val();
+    var caseId = $(this).data('case-id');
+    $.post('/client/case/' + caseId + '/messages', {message: msg}, function(resp) {
+        $('#messageForm')[0].reset();
+        loadMessages();
+    });
+});
+$(document).ready(loadMessages);
+</script>
+{% endblock %} 

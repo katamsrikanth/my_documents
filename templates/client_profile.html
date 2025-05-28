@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card mx-auto" style="max-width: 600px;">
+        <div class="card-body">
+            <h3 class="card-title mb-3">Your Profile</h3>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item"><strong>Name:</strong> {{ client.first_name }} {{ client.last_name }}</li>
+                <li class="list-group-item"><strong>Email:</strong> {{ client.email }}</li>
+                <li class="list-group-item"><strong>Phone:</strong> {{ client.phone_number }}</li>
+                <li class="list-group-item"><strong>Alternate Phone:</strong> {{ client.alternate_number }}</li>
+                <li class="list-group-item"><strong>Address:</strong> {{ client.address }}, {{ client.city }}, {{ client.state }} {{ client.zip_code }}, {{ client.country }}</li>
+                <li class="list-group-item"><strong>Preferred Contact:</strong> {{ client.preferred_contact }}</li>
+                <li class="list-group-item"><strong>Client Type:</strong> {{ client.client_type }}</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -38,6 +38,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from models.attorney_case_history import AttorneyCaseHistory
 from models.attorney_feedback import AttorneyFeedback
+import secrets
 
 # Load environment variables
 load_dotenv()
@@ -113,6 +114,10 @@ def login():
         
         if User.check_password(username, password):
             session['username'] = username
+            # Set role in session
+            user = User.db.users.find_one({'username': username})
+            if user and 'role' in user:
+                session['role'] = user['role']
             flash('Successfully logged in!')
             return redirect(url_for('document_creation'))
         else:
@@ -4185,6 +4190,175 @@ def inject_user():
     return {
         'current_user': session.get('username', 'Guest')
     }
+
+# Decorator to restrict access to clients only
+def client_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session or session.get('role') != 'client':
+            flash('You must be logged in as a client to access this page.')
+            return redirect(url_for('client_login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/client/login', methods=['GET', 'POST'])
+def client_login():
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        from models.user import User
+        user_data = User.db.users.find_one({'username': email, 'role': 'client'})
+        if user_data and User.check_password(email, password):
+            session['user_id'] = str(user_data['_id'])
+            session['role'] = 'client'
+            session['client_id'] = user_data.get('client_id')
+            return redirect(url_for('client_dashboard'))
+        flash('Invalid credentials')
+    return render_template('client_login.html')
+
+@app.route('/client/dashboard')
+@client_required
+def client_dashboard():
+    client = Client.get_by_id(session['client_id'])
+    cases = Case.get_by_client_id(session['client_id'])
+    return render_template('client_dashboard.html', client=client, cases=cases)
+
+@app.route('/client/profile')
+@client_required
+def client_profile():
+    client = Client.get_by_id(session['client_id'])
+    return render_template('client_profile.html', client=client)
+
+@app.route('/client/cases')
+@client_required
+def client_cases():
+    cases = Case.get_by_client_id(session['client_id'])
+    return render_template('client_cases.html', cases=cases)
+
+@app.route('/client/case/<case_id>')
+@client_required
+def client_case_detail(case_id):
+    case = Case.get_by_id(case_id)
+    if not case or case.client_id != session['client_id']:
+        flash('Access denied.')
+        return redirect(url_for('client_dashboard'))
+    return render_template('client_case_detail.html', case=case)
+
+@app.route('/client/case/<case_id>/upload', methods=['POST'])
+@client_required
+def client_upload_document(case_id):
+    case = Case.get_by_id(case_id)
+    if not case or case.client_id != session['client_id']:
+        return jsonify({'error': 'Access denied.'}), 403
+    file = request.files.get('document')
+    if file:
+        # Save file logic (reuse your existing document upload logic)
+        filename = secure_filename(file.filename)
+        case_path = case.get_case_document_path()
+        file.save(os.path.join(case_path, filename))
+        # Update case documents
+        doc_meta = {'filename': filename, 'uploaded_at': datetime.utcnow()}
+        case.documents.append(doc_meta)
+        case.save()
+        return jsonify({'success': True})
+    return jsonify({'error': 'No file uploaded.'}), 400
+
+@app.route('/client/case/<case_id>/messages', methods=['GET', 'POST'])
+@client_required
+def client_case_messages(case_id):
+    from models.case import Case
+    db = Case.get_collection().database
+    if request.method == 'POST':
+        message = request.form['message']
+        db.messages.insert_one({
+            'case_id': case_id,
+            'sender': 'client',
+            'client_id': session['client_id'],
+            'message': message,
+            'timestamp': datetime.utcnow()
+        })
+        return jsonify({'success': True})
+    # GET: fetch messages
+    msgs = list(db.messages.find({'case_id': case_id}).sort('timestamp', 1))
+    for m in msgs:
+        m['_id'] = str(m['_id'])
+        m['timestamp'] = m['timestamp'].strftime('%Y-%m-%d %H:%M') if 'timestamp' in m else ''
+    return jsonify({'messages': msgs})
+
+# Admin required decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = User.db.users.find_one({'username': session.get('username')})
+        if not user or user.get('role') != 'admin':
+            flash('Admin access required.')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Promote test1234@gmail.com to admin (run once at startup)
+with app.app_context():
+    User.db.users.update_one({'username': 'test1234@gmail.com'}, {'$set': {'role': 'admin'}})
+
+# Admin: Create client and generate registration link
+@app.route('/admin/create_client', methods=['GET', 'POST'])
+@admin_required
+def admin_create_client():
+    if request.method == 'POST':
+        # Create client profile (no password)
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        email = request.form.get('email')
+        phone_number = request.form.get('phone_number')
+        # ... (other fields as needed)
+        # Create client in clients collection
+        client = Client(
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            phone_number=phone_number
+        )
+        client.save()
+        # Generate registration token
+        token = secrets.token_urlsafe(32)
+        User.db.pending_registrations.insert_one({
+            'email': email,
+            'client_id': client.client_id,
+            'token': token,
+            'created_at': datetime.utcnow(),
+            'used': False
+        })
+        registration_link = url_for('client_register', token=token, _external=True)
+        flash(f'Registration link for client: {registration_link}', 'info')
+        return render_template('admin_create_client.html', registration_link=registration_link)
+    return render_template('admin_create_client.html')
+
+# Client registration via token
+@app.route('/client/register/<token>', methods=['GET', 'POST'])
+def client_register(token):
+    reg = User.db.pending_registrations.find_one({'token': token, 'used': False})
+    if not reg:
+        flash('Invalid or expired registration link.', 'danger')
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        password = request.form.get('password')
+        confirm = request.form.get('confirm')
+        if not password or password != confirm:
+            flash('Passwords do not match.', 'danger')
+            return render_template('client_register.html')
+        # Create user account
+        user = User(
+            username=reg['email'],
+            password=password,
+            role='client',
+            client_id=reg['client_id']
+        )
+        user.save()
+        # Mark token as used
+        User.db.pending_registrations.update_one({'_id': reg['_id']}, {'$set': {'used': True, 'used_at': datetime.utcnow()}})
+        flash('Registration complete. You can now log in.', 'success')
+        return redirect(url_for('client_login'))
+    return render_template('client_register.html', email=reg['email'])
 
 if __name__ == '__main__':
     try:

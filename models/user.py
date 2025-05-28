@@ -22,16 +22,20 @@ class User:
     client = client
     db = client['my_law_users']
     
-    def __init__(self, username, password=None):
+    def __init__(self, username, password=None, role=None, client_id=None):
         self.username = username
         self.password = password
+        self.role = role
+        self.client_id = client_id
 
     def save(self):
         try:
             if not self.db.users.find_one({'username': self.username}):
                 self.db.users.insert_one({
                     'username': self.username,
-                    'password': generate_password_hash(self.password, method='pbkdf2:sha256')
+                    'password': generate_password_hash(self.password, method='pbkdf2:sha256'),
+                    'role': self.role,
+                    'client_id': self.client_id
                 })
                 logger.info(f"Successfully created user: {self.username}")
                 return True
@@ -46,7 +50,11 @@ class User:
         try:
             user_data = User.db.users.find_one({'username': username})
             if user_data:
-                user = User(username)
+                user = User(
+                    username=user_data['username'],
+                    role=user_data.get('role'),
+                    client_id=user_data.get('client_id')
+                )
                 return user
             return None
         except Exception as e:

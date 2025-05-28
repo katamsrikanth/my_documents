@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Welcome, {{ client.first_name }} {{ client.last_name }}</h2>
+    <div class="card my-4">
+        <div class="card-body">
+            <h5 class="card-title">Profile Summary</h5>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item"><strong>Email:</strong> {{ client.email }}</li>
+                <li class="list-group-item"><strong>Phone:</strong> {{ client.phone_number }}</li>
+                <li class="list-group-item"><strong>Address:</strong> {{ client.address }}, {{ client.city }}, {{ client.state }} {{ client.zip_code }}, {{ client.country }}</li>
+                <li class="list-group-item"><strong>Preferred Contact:</strong> {{ client.preferred_contact }}</li>
+            </ul>
+        </div>
+    </div>
+    <h4>Your Cases</h4>
+    <table class="table table-bordered table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>Title</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Start Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for case in cases %}
+            <tr>
+                <td>{{ case.title }}</td>
+                <td>{{ case.case_type }}</td>
+                <td>{{ case.status }}</td>
+                <td>
+                  {% if case.start_date %}
+                    {% if case.start_date.strftime is defined %}
+                      {{ case.start_date.strftime('%Y-%m-%d') }}
+                    {% else %}
+                      {{ case.start_date }}
+                    {% endif %}
+                  {% endif %}
+                </td>
+                <td><a href="{{ url_for('client_case_detail', case_id=case._id) }}" class="btn btn-sm btn-info">View</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center">No cases found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %} 
