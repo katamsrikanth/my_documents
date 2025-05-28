@@ -32,81 +32,123 @@
             font-family: 'Courier New', monospace;
         }
         
-        /* Mega Menu Styles */
+        /* Modern Navbar Styles */
         .navbar {
-            background: linear-gradient(135deg, #2c3e50, #3498db) !important;
-            padding: 1rem 0;
+            background: rgba(17, 24, 39, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1rem 2rem;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 1030; /* Higher than card elements */
         }
         
         .navbar-brand {
+            font-weight: 600;
             font-size: 1.5rem;
-            font-weight: bold;
-            color: #fff !important;
-        }
-        
-        .nav-link {
-            color: #fff !important;
-            font-weight: 500;
-            padding: 0.5rem 1rem !important;
-            transition: all 0.3s ease;
+            background: linear-gradient(45deg, #00f2fe, #4facfe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
             position: relative;
         }
         
-        .nav-link:hover {
-            color: #f8f9fa !important;
-            transform: translateY(-2px);
-        }
-        
-        .nav-link::after {
+        .navbar-brand::after {
             content: '';
             position: absolute;
-            width: 0;
+            bottom: -2px;
+            left: 0;
+            width: 100%;
             height: 2px;
-            bottom: 0;
-            left: 50%;
-            background-color: #fff;
-            transition: all 0.3s ease;
-            transform: translateX(-50%);
+            background: linear-gradient(45deg, #00f2fe, #4facfe);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
         }
         
-        .nav-link:hover::after {
-            width: 100%;
+        .navbar-brand:hover::after {
+            transform: scaleX(1);
+        }
+        
+        .nav-link {
+            color: rgba(255, 255, 255, 0.8) !important;
+            font-weight: 500;
+            padding: 0.5rem 1rem !important;
+            margin: 0 0.2rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-link:hover {
+            color: #fff !important;
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-1px);
+        }
+        
+        .nav-link.active {
+            background: linear-gradient(45deg, #00f2fe, #4facfe);
+            color: #fff !important;
+            box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
         }
         
         .navbar-toggler {
-            border-color: rgba(255,255,255,0.5);
+            border: none;
+            padding: 0.5rem;
+        }
+        
+        .navbar-toggler:focus {
+            box-shadow: none;
         }
         
         .navbar-toggler-icon {
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255, 255, 255, 0.8)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.8%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+        }
+        
+        .dropdown-menu {
+            background: rgba(17, 24, 39, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            z-index: 1031; /* Higher than navbar */
+        }
+        
+        .dropdown-item {
+            color: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            transform: translateX(5px);
+        }
+        
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            padding: 0.25rem 0.5rem;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #00f2fe, #4facfe);
+            color: #fff;
+            font-size: 0.75rem;
+            font-weight: 600;
         }
         
         @media (max-width: 991.98px) {
             .navbar-collapse {
-                background: rgba(44, 62, 80, 0.95);
+                background: rgba(17, 24, 39, 0.95);
+                backdrop-filter: blur(10px);
+                border-radius: 12px;
                 padding: 1rem;
-                border-radius: 0.5rem;
                 margin-top: 1rem;
             }
             
             .nav-link {
-                padding: 0.75rem 1rem !important;
-                border-bottom: 1px solid rgba(255,255,255,0.1);
+                margin: 0.2rem 0;
             }
-            
-            .nav-link:last-child {
-                border-bottom: none;
-            }
-        }
-        
-        /* Active menu item */
-        .nav-link.active {
-            color: #fff !important;
-            font-weight: bold;
-        }
-        
-        .nav-link.active::after {
-            width: 100%;
         }
         
         .search-container {
@@ -137,11 +179,6 @@
             padding: 0.75rem 1.5rem;
             transition: all 0.3s ease;
             white-space: nowrap;
-        }
-        
-        .dropdown-item:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(5px);
         }
         
         .dropdown-item i {
@@ -209,145 +246,191 @@
             margin: 0.5rem 0;
             opacity: 0.1;
         }
+
+        /* Ensure cards don't overlap dropdowns */
+        .card {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Container spacing */
+        .container.mt-4 {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Modal header and close button always on top */
+        .modal-header {
+            position: relative;
+            z-index: 1052;
+            background: rgba(17, 24, 39, 0.98); /* match dark theme, solid for contrast */
+            color: #fff;
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+        }
+        .modal-header .btn-close {
+            z-index: 1053;
+            filter: invert(1) grayscale(1) brightness(2);
+            opacity: 1;
+        }
+        .modal-content {
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .modal-backdrop {
+            position:unset;
+            top: 0;
+            left: 0;
+            z-index: 1050;
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+        }
+        .modal-backdrop.show {
+            opacity: 0.7;
+        }
+        /* Ensure modal is always centered and above overlays */
+        .modal {
+            z-index: 1050;
+            pointer-events: auto;
+        }
+        .modal-dialog {
+            margin-top: 4.5rem !important; /* space below header */
+            margin-bottom: 2rem;
+        }
+        .modal-content, .modal-footer, .modal-header, .modal-body {
+            pointer-events: auto;
+        }
+        /* Remove any accidental pointer-events: none on modal children */
+        .modal * {
+            pointer-events: auto !important;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container">
-            <a class="navbar-brand" href="/">
-                <i class="fas fa-file-alt me-2"></i>Legal Assistant
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-robot me-2"></i>Legal Assistant AI
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {{ 'active' if request.endpoint == 'index' }}" href="{{ url_for('index') }}">
+                            <i class="fas fa-home me-1"></i> Home
+                        </a>
+                    </li>
                     <!-- Documents Dropdown -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="documentsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-folder me-2"></i>Documents
+                        <a class="nav-link dropdown-toggle {{ 'active' if request.endpoint in ['document_creation', 'document_review', 'document_scanner', 'case_analyzer'] }}" 
+                           href="#" id="documentsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-folder me-1"></i> Documents
                         </a>
-                        <ul class="dropdown-menu" aria-labelledby="documentsDropdown">
-                            <li>
-                                <a class="dropdown-item {% if request.path == '/document_creation' %}active{% endif %}" href="/document_creation">
-                                    <i class="fas fa-file-alt"></i> Create Document
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item {% if request.path == '/document_review' %}active{% endif %}" href="/document_review">
-                                    <i class="fas fa-file-contract"></i> Document Review
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item {% if request.path == '/document_scanner' %}active{% endif %}" href="/document_scanner">
-                                    <i class="fas fa-camera"></i> Document Scanner
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item {% if request.path == '/case_analyzer' %}active{% endif %}" href="/case_analyzer">
-                                    <i class="fas fa-lightbulb me-2"></i> Case Analyzer
-                                </a>
-                            </li>
-                        </ul>
+                        <div class="dropdown-menu">
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'document_creation' }}" href="{{ url_for('document_creation') }}">
+                                <i class="fas fa-file-alt me-2"></i> Create Document
+                            </a>
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'document_review' }}" href="{{ url_for('document_review') }}">
+                                <i class="fas fa-file-contract me-2"></i> Document Review
+                            </a>
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'document_scanner' }}" href="{{ url_for('document_scanner') }}">
+                                <i class="fas fa-camera me-2"></i> Document Scanner
+                            </a>
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'case_analyzer' }}" href="{{ url_for('case_analyzer') }}">
+                                <i class="fas fa-lightbulb me-2"></i> Case Analyzer
+                            </a>
+                        </div>
                     </li>
-                    
-                    <!-- Main Navigation Items -->
+                    <!-- Cases Dropdown -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="casesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-gavel me-2"></i>Cases
+                        <a class="nav-link dropdown-toggle {{ 'active' if request.endpoint in ['cases', 'clients', 'list_attorneys', 'appointments', 'initial_inquiry_page'] }}" 
+                           href="#" id="casesDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-gavel me-1"></i> Cases
                         </a>
-                        <ul class="dropdown-menu" aria-labelledby="casesDropdown">
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('clients') }}">
-                                    <i class="fas fa-users me-2"></i>Clients
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('cases') }}">
-                                    <i class="fas fa-folder me-2"></i>Cases
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('list_attorneys') }}">
-                                    <i class="fas fa-user-tie me-2"></i>Attorneys
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item {% if request.path == '/appointments' %}active{% endif %}" href="/appointments">
-                                    <i class="fas fa-calendar-alt me-2"></i>Appointments
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item {% if request.path == '/initial_inquiry' %}active{% endif %}" href="{{ url_for('initial_inquiry_page') }}">
-                                    <i class="fas fa-phone-alt me-2"></i>Initial Inquiry
-                                </a>
-                            </li>
-                        </ul>
+                        <div class="dropdown-menu">
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'clients' }}" href="{{ url_for('clients') }}">
+                                <i class="fas fa-users me-2"></i> Clients
+                            </a>
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'cases' }}" href="{{ url_for('cases') }}">
+                                <i class="fas fa-folder me-2"></i> Cases
+                            </a>
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'list_attorneys' }}" href="{{ url_for('list_attorneys') }}">
+                                <i class="fas fa-user-tie me-2"></i> Attorneys
+                            </a>
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'appointments' }}" href="{{ url_for('appointments') }}">
+                                <i class="fas fa-calendar-alt me-2"></i> Appointments
+                            </a>
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'initial_inquiry_page' }}" href="{{ url_for('initial_inquiry_page') }}">
+                                <i class="fas fa-phone-alt me-2"></i> Initial Inquiry
+                            </a>
+                        </div>
                     </li>
+                    <!-- Search Dropdown -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {{ 'active' if request.endpoint in ['search_documents', 'court_cases'] }}" 
+                           href="#" id="searchDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-search me-1"></i> Search
+                        </a>
+                        <div class="dropdown-menu">
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'search_documents' }}" href="{{ url_for('search_documents') }}">
+                                <i class="fas fa-search me-2"></i> Search Documents
+                            </a>
+                            <a class="dropdown-item {{ 'active' if request.endpoint == 'court_cases' }}" href="{{ url_for('court_cases') }}">
+                                <i class="fas fa-gavel me-2"></i> Court Cases
+                            </a>
+                        </div>
+                    </li>
+                    <!-- Collections -->
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/manage' %}active{% endif %}" href="/manage">
-                            <i class="fas fa-folder-open me-2"></i>Collections
+                        <a class="nav-link {{ 'active' if request.endpoint == 'manage_collections' }}" href="{{ url_for('manage_collections') }}">
+                            <i class="fas fa-folder-open me-1"></i> Collections
                         </a>
                     </li>
-                    <!-- Search Dropdown with Court Cases -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.path == '/index' or request.path == '/court_cases' %}active{% endif %}" href="#" id="searchDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-search me-2"></i>Search
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="searchDropdown">
-                            <li>
-                                <a class="dropdown-item {% if request.path == '/index' %}active{% endif %}" href="/index">
-                                    <i class="fas fa-search me-2"></i>Search
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item {% if request.path == '/court_cases' %}active{% endif %}" href="/court_cases">
-                                    <i class="fas fa-gavel me-2"></i>Court Cases
-                                </a>
-                            </li>
-                        </ul>
-                    </li>
-                    <!-- Mega Menu Dropdown -->
-                    
                 </ul>
-
-                <!-- User Authentication Menu -->
                 <ul class="navbar-nav">
-                    {% if session.get('username') %}
-                        <li class="nav-item">
-                            <span class="nav-link">
-                                <i class="fas fa-user me-2"></i>Welcome, {{ session.get('username') }}
-                            </span>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('logout') }}">
-                                <i class="fas fa-sign-out-alt me-2"></i>Logout
-                            </a>
-                        </li>
-                    {% else %}
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('login') }}">
-                                <i class="fas fa-sign-in-alt me-2"></i>Login
-                            </a>
-                        </li>
-                    {% endif %}
-                </ul>
-
-                <!-- Notifications Bell Icon -->
-                <ul class="navbar-nav ms-3">
                     <li class="nav-item dropdown">
-                        <a class="nav-link position-relative" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-bell fa-lg"></i>
-                            <span id="notificationBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:0.7em; display:none;">0</span>
+                        <a class="nav-link dropdown-toggle" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-bell"></i>
+                            <span id="notificationBadge" class="notification-badge" style="display: none;">0</span>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" style="min-width: 320px; max-width: 400px;">
-                            <li class="dropdown-header">Upcoming Appointments</li>
-                            <li><div id="notificationsList" class="px-3 py-2 text-muted small">Loading...</div></li>
-                        </ul>
+                        <div class="dropdown-menu dropdown-menu-end">
+                            <div class="dropdown-header">Upcoming Appointments</div>
+                            <div id="notificationsList" class="px-3 py-2">
+                                <div class="text-muted small">Loading...</div>
+                            </div>
+                        </div>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user-circle me-1"></i> {{ current_user }}
+                        </a>
+                        <div class="dropdown-menu dropdown-menu-end">
+                            {% if current_user != 'Guest' %}
+                            <a class="dropdown-item" href="#">
+                                <i class="fas fa-user-cog me-2"></i> Profile
+                            </a>
+                            <a class="dropdown-item" href="#">
+                                <i class="fas fa-cog me-2"></i> Settings
+                            </a>
+                            <div class="dropdown-divider"></div>
+                            <a class="dropdown-item" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt me-2"></i> Logout
+                            </a>
+                            {% else %}
+                            <a class="dropdown-item" href="{{ url_for('login') }}">
+                                <i class="fas fa-sign-in-alt me-2"></i> Login
+                            </a>
+                            <a class="dropdown-item" href="{{ url_for('register') }}">
+                                <i class="fas fa-user-plus me-2"></i> Register
+                            </a>
+                            {% endif %}
+                        </div>
                     </li>
                 </ul>
-                <!-- End Notifications Bell Icon -->
             </div>
         </div>
     </nav>
@@ -447,16 +530,18 @@
                 $.getJSON('/api/upcoming-appointments', function(data) {
                     var list = $('#notificationsList');
                     var badge = $('#notificationBadge');
+                    
                     if (data.count > 0) {
                         badge.text(data.count).show();
                         var html = '';
                         data.appointments.forEach(function(appt) {
-                            html += `<div class='mb-2'>
-                                <div><i class='fas fa-calendar-alt me-1'></i> <strong>${appt.date_time}</strong></div>
-                                <div><i class='fas fa-briefcase me-1'></i> ${appt.case_title || 'No Case Assigned'}</div>
-                                <div><i class='fas fa-user me-1'></i> ${appt.client_name || 'N/A'}</div>
-                                <hr class='my-1'>
-                            </div>`;
+                            html += `
+                                <div class="mb-2">
+                                    <div><i class="fas fa-calendar-alt me-1"></i> <strong>${appt.date_time}</strong></div>
+                                    <div><i class="fas fa-briefcase me-1"></i> ${appt.case_title || 'No Case Assigned'}</div>
+                                    <div><i class="fas fa-user me-1"></i> ${appt.client_name || 'N/A'}</div>
+                                    <hr class="my-1">
+                                </div>`;
                         });
                         list.html(html);
                     } else {
@@ -468,12 +553,60 @@
                     $('#notificationBadge').hide();
                 });
             }
+
             // Fetch notifications when dropdown is shown
             $('#notificationsDropdown').on('show.bs.dropdown', fetchNotifications);
-            // Optionally, fetch on page load for badge
+            
+            // Fetch on page load for badge
             fetchNotifications();
+            
+            // Refresh notifications every 5 minutes
+            setInterval(fetchNotifications, 300000);
         });
     </script>
     {% block extra_js %}{% endblock %}
+
+    <!-- Footer -->
+    <footer class="footer mt-auto py-3">
+        <div class="container">
+            <hr class="my-3">
+            <div class="text-center">
+                <p class="mb-2 text-light">&copy; {{ now.year }} Legal Assistant. All rights reserved.</p>
+                <div class="footer-links">
+                    <a href="{{ url_for('terms') }}" class="text-decoration-none me-3">Terms & Conditions</a>
+                    <a href="{{ url_for('privacy') }}" class="text-decoration-none">Privacy Policy</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <style>
+        .footer {
+            background: rgba(17, 24, 39, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1.5rem 0;
+            margin-top: 3rem;
+        }
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.8);
+            transition: all 0.3s ease;
+        }
+        .footer-links a:hover {
+            color: #4facfe;
+            text-decoration: none;
+        }
+        .footer hr {
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .container.mt-4 {
+            flex: 1;
+        }
+    </style>
 </body>
 </html> 

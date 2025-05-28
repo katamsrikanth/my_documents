@@ -4159,7 +4159,32 @@ def new_appointment():
         return redirect(url_for('appointments'))
     return render_template('edit_appointment.html', appointment=None, cases=cases, attorneys=attorneys)
 
+@app.route('/terms')
+def terms():
+    return render_template('terms.html')
 
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
+
+@app.context_processor
+def inject_now():
+    return {'now': datetime.now()}
+
+@app.context_processor
+def inject_notifications():
+    # Get unread notifications count and notifications list
+    # For now, we'll return empty values, but you can implement the actual logic here
+    return {
+        'unread_notifications': 0,
+        'notifications': []
+    }
+
+@app.context_processor
+def inject_user():
+    return {
+        'current_user': session.get('username', 'Guest')
+    }
 
 if __name__ == '__main__':
     try:
